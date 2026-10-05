@@ -27,6 +27,7 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'"],
+        fontSrc: ["'self'"],
         imgSrc: ["'self'", "blob:", "data:"],
         connectSrc: ["'self'"],
         frameAncestors: ["'none'"],

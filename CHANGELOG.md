@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.6 — 2026-10-05
+
+Novo visual da Central e e-mail com Reply-To.
+
+- **Novo layout** (aprovado no Claude Design): formulário em passos numerados, tela de protocolo em formato de comprovante, consulta com linha do tempo e status coloridos. Funciona em celular e computador.
+- Fontes (DM Sans e Bricolage Grotesque) hospedadas no próprio site: nenhuma requisição ao Google, bom para a LGPD.
+- E-mail de confirmação agora leva `Reply-To` = `SUPPORT_EMAIL`: se o cliente responder, a resposta cai na caixa de atendimento, mesmo com o remetente em outro domínio (ex.: `send.mcs.ind.br` do Resend).
+- O tema escuro foi removido (o layout é claro).
+- CSP: liberadas fontes do próprio site (`font-src 'self'`).
+
 ## v1.0.5 — 2026-10-05
 
 Correção do remetente dos e-mails de confirmação.

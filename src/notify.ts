@@ -144,6 +144,8 @@ export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
   const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
   const info = await t.sendMail({
     from: config.mailFrom,
+    // Respostas do cliente vão para a caixa de atendimento (o remetente pode ser de outro domínio, ex.: Resend)
+    ...(config.supportEmail.includes("@") ? { replyTo: config.supportEmail } : {}),
     envelope: { from: envelopeFrom, to: o.email },
     to: o.email,
     subject: `Protocolo ${o.protocolo} — recebemos sua ocorrência`,

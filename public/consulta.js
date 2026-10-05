@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.0.5 — consulta de protocolo
+// Central de Ocorrências v1.0.6 — consulta de protocolo
 (async function () {
   const $ = (s) => document.querySelector(s);
   const fmt = (iso) => new Date(iso.replace(" ", "T") + "Z").toLocaleString("pt-BR");
@@ -8,6 +8,7 @@
     document.title = "Consultar protocolo — " + cfg.marca;
     $("#marca").textContent = cfg.marca;
     $("#rodape").textContent = cfg.marca + " · v" + cfg.versao;
+    if (cfg.emailSuporte) $("#suporte").textContent = "Dúvidas? " + cfg.emailSuporte;
   } catch {}
 
   const pre = new URLSearchParams(location.search).get("protocolo");

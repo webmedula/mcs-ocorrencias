@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.0.5 — formulário
+// Central de Ocorrências v1.0.6 — formulário
 (async function () {
   const $ = (s) => document.querySelector(s);
   const form = $("#form");
@@ -11,10 +11,12 @@
     document.title = "Registrar ocorrência — " + cfg.marca;
     $("#marca").textContent = cfg.marca;
     $("#rodape").textContent = cfg.marca + " · v" + cfg.versao;
+    if (cfg.emailSuporte) $("#suporte").textContent = "Dúvidas? " + cfg.emailSuporte;
 
     const canais = $("#canais");
     for (const [valor, nome] of Object.entries(cfg.canais)) {
       const l = document.createElement("label");
+      l.className = "canal";
       const i = document.createElement("input");
       i.type = "radio"; i.name = "canal"; i.value = valor;
       const s = document.createElement("span"); s.textContent = nome;
@@ -98,6 +100,7 @@
       $("#protocolo").textContent = json.protocolo;
       $("#ver-status").href = "consulta.html?protocolo=" + encodeURIComponent(json.protocolo);
       $("#tela-form").classList.add("oculto");
+      document.title = "Ocorrência registrada — " + $("#marca").textContent;
       $("#tela-ok").classList.remove("oculto");
       window.scrollTo({ top: 0 });
     } catch {

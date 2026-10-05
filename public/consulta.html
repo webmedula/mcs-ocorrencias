@@ -9,28 +9,29 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="Página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a href="index.html">Nova ocorrência</a></div></header>
-  <main>
-    <h1>Consultar atendimento</h1>
+  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="MCS Brasil, página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a class="nav-link" href="index.html">Nova ocorrência</a></div></header>
+  <main class="medio">
+    <h1 class="menor">Consultar atendimento</h1>
     <p class="sub">Informe o protocolo e o e-mail usado no registro.</p>
 
-    <form id="form" class="card" novalidate>
-      <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
-      <label for="protocolo">Protocolo</label>
-      <input type="text" id="protocolo" autocomplete="off" autocapitalize="characters" required>
-      <label for="email">E-mail</label>
-      <input type="email" id="email" autocomplete="email" required>
-      <div style="margin-top:16px"><button type="submit" id="buscar">Consultar</button></div>
-    </form>
+    <div class="consulta">
+      <form id="form" class="card simples" novalidate>
+        <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
+        <label for="protocolo">Protocolo</label>
+        <input type="text" id="protocolo" autocomplete="off" autocapitalize="characters" required>
+        <label for="email">E-mail</label>
+        <input type="email" id="email" autocomplete="email" required>
+        <button type="submit" id="buscar" class="primario">Consultar</button>
+      </form>
 
-    <section id="resultado" class="card oculto" aria-live="polite">
-      <span class="status" id="status"></span>
-      <p style="margin:12px 0 0"><b id="r-protocolo"></b><br>
-        <span class="aviso" id="r-meta"></span></p>
-      <ul class="hist" id="hist"></ul>
-    </section>
+      <section id="resultado" class="card simples oculto" aria-live="polite">
+        <div class="resumo"><b id="r-protocolo"></b><span class="status" id="status"></span></div>
+        <p class="aviso" id="r-meta"></p>
+        <ul class="hist" id="hist"></ul>
+      </section>
+    </div>
   </main>
-  <footer id="rodape"></footer>
+  <footer><span id="rodape"></span><span id="suporte"></span></footer>
   <script src="consulta.js"></script>
 </body>
 </html>

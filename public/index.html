@@ -6,61 +6,87 @@
   <meta name="robots" content="noindex">
   <title>Registrar ocorrência</title>
   <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preload" href="fonts/bricolage-grotesque-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="Página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a href="consulta.html">Consultar protocolo</a></div></header>
+  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="MCS Brasil, página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a class="nav-link" href="consulta.html">Consultar protocolo</a></div></header>
 
-  <main>
-    <section id="tela-form">
-      <h1>Registrar ocorrência</h1>
-      <p class="sub">Teve algum problema com a sua compra? Conte para a gente. Você recebe um protocolo para acompanhar.</p>
-
-      <form id="form" novalidate enctype="multipart/form-data">
-        <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
-
-        <div class="card">
-          <h2>1. Onde você comprou?</h2>
-          <div class="canais" id="canais" role="radiogroup" aria-label="Canal da compra"></div>
-          <div class="erro-campo" data-erro="canal"></div>
-
-          <label for="pedido">Número do pedido <span class="dica">(está na sua compra ou na nota fiscal)</span></label>
-          <input type="text" id="pedido" name="pedido" maxlength="60" autocomplete="off" inputmode="text" required>
-          <div class="erro-campo" data-erro="pedido"></div>
+  <main id="principal">
+    <div id="tela-form" class="layout">
+      <section class="intro">
+        <p class="selo">Central de Ocorrências</p>
+        <h1>Algo deu errado com a sua compra? A gente resolve.</h1>
+        <p class="sub">Conte o que aconteceu em poucos minutos. Você recebe um número de protocolo e acompanha cada passo do atendimento.</p>
+        <ol class="passos">
+          <li><span class="num">1</span><span><strong>Conte o que houve</strong>Pedido, assunto e, se puder, fotos do problema.</span></li>
+          <li><span class="num">2</span><span><strong>Receba o protocolo</strong>Enviamos a confirmação para o seu e-mail na hora.</span></li>
+          <li><span class="num">3</span><span><strong>Acompanhe o status</strong>Nossa equipe analisa e responde por lá.</span></li>
+        </ol>
+        <div class="nota">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c73e00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p>Já abriu uma reclamação no marketplace? Mantenha-a aberta. Esta central registra o seu caso diretamente com a empresa.</p>
         </div>
+      </section>
 
-        <div class="card">
-          <h2>2. O que aconteceu?</h2>
-          <label for="tipo">Assunto</label>
-          <select id="tipo" name="tipo" required><option value="">Selecione…</option></select>
-          <div class="erro-campo" data-erro="tipo"></div>
+      <section class="principal">
+        <form id="form" class="card" novalidate enctype="multipart/form-data">
+          <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
 
-          <label for="descricao">Descreva o problema</label>
-          <textarea id="descricao" name="descricao" maxlength="3000" required></textarea>
-          <div class="erro-campo" data-erro="descricao"></div>
+          <fieldset>
+            <legend><span class="n">1</span>Onde você comprou?</legend>
+            <div class="canais" id="canais" role="radiogroup" aria-label="Canal da compra"></div>
+            <div class="erro-campo" data-erro="canal"></div>
 
-          <label for="fotos">Fotos <span class="dica">(opcional · até 5 · JPG, PNG ou WebP · 5 MB cada)</span></label>
-          <input type="file" id="fotos" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>
-          <div class="fotos" id="previa"></div>
-          <div class="erro-campo" data-erro="fotos"></div>
-        </div>
+            <label for="pedido">Número do pedido</label>
+            <input type="text" id="pedido" name="pedido" maxlength="60" autocomplete="off" inputmode="text" required>
+            <p class="ajuda">Está na sua compra ou na nota fiscal.</p>
+            <div class="erro-campo" data-erro="pedido"></div>
+          </fieldset>
 
-        <div class="card">
-          <h2>3. Seus dados</h2>
-          <label for="nome">Nome</label>
-          <input type="text" id="nome" name="nome" maxlength="120" autocomplete="name" required>
-          <div class="erro-campo" data-erro="nome"></div>
+          <fieldset>
+            <legend><span class="n">2</span>O que aconteceu?</legend>
+            <label for="tipo">Assunto</label>
+            <select id="tipo" name="tipo" required><option value="">Selecione…</option></select>
+            <div class="erro-campo" data-erro="tipo"></div>
 
-          <label for="email">E-mail</label>
-          <input type="email" id="email" name="email" maxlength="160" autocomplete="email" required>
-          <div class="erro-campo" data-erro="email"></div>
+            <label for="descricao">Descreva o problema</label>
+            <textarea id="descricao" name="descricao" maxlength="3000" placeholder="Conte com o máximo de detalhes que puder." required></textarea>
+            <div class="erro-campo" data-erro="descricao"></div>
 
-          <label for="telefone">Telefone ou WhatsApp <span class="dica">(opcional)</span></label>
-          <input type="tel" id="telefone" name="telefone" maxlength="30" autocomplete="tel">
-          <div class="erro-campo" data-erro="telefone"></div>
+            <label for="fotos">Fotos <span class="dica">(opcional)</span></label>
+            <label class="drop" for="fotos">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#c73e00" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="m21 16-5-5-8 8"/></svg>
+              <strong>Toque para escolher fotos</strong>
+              <span class="dica">Até 5 fotos · JPG, PNG ou WebP · 5 MB cada</span>
+              <input type="file" id="fotos" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>
+            </label>
+            <div class="fotos" id="previa"></div>
+            <div class="erro-campo" data-erro="fotos"></div>
+          </fieldset>
 
-          <!-- honeypot: pessoas não veem; robôs preenchem -->
-          <div class="hp" aria-hidden="true"><label>Site <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          <fieldset>
+            <legend><span class="n">3</span>Seus dados</legend>
+            <label for="nome">Nome</label>
+            <input type="text" id="nome" name="nome" maxlength="120" autocomplete="name" required>
+            <div class="erro-campo" data-erro="nome"></div>
+
+            <div class="linha">
+              <div>
+                <label for="email">E-mail</label>
+                <input type="email" id="email" name="email" maxlength="160" autocomplete="email" required>
+                <div class="erro-campo" data-erro="email"></div>
+              </div>
+              <div>
+                <label for="telefone">WhatsApp <span class="dica">(opcional)</span></label>
+                <input type="tel" id="telefone" name="telefone" maxlength="30" autocomplete="tel">
+                <div class="erro-campo" data-erro="telefone"></div>
+              </div>
+            </div>
+
+            <!-- honeypot: pessoas não veem; robôs preenchem -->
+            <div class="hp" aria-hidden="true"><label>Site <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+          </fieldset>
 
           <label class="check" for="consentimento">
             <input type="checkbox" id="consentimento" name="consentimento" value="true">
@@ -68,27 +94,49 @@
               <a id="link-privacidade" class="oculto" href="#" target="_blank" rel="noopener">Política de privacidade</a></span>
           </label>
           <div class="erro-campo" data-erro="consentimento"></div>
+
+          <button type="submit" id="enviar" class="primario">Enviar ocorrência</button>
+        </form>
+
+        <div class="nota so-mobile">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#c73e00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.2 7.8 8 9 4.8-1.2 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p>Já abriu uma reclamação no marketplace? Mantenha-a aberta. Esta central registra o seu caso diretamente com a empresa.</p>
         </div>
+      </section>
+    </div>
 
-        <p class="aviso" id="aviso-marketplace">Se a compra foi feita em um marketplace e você já abriu uma reclamação lá, mantenha-a aberta. Esta central registra o seu caso diretamente com a empresa.</p>
-        <button type="submit" id="enviar">Enviar ocorrência</button>
-      </form>
-    </section>
-
-    <section id="tela-ok" class="oculto" aria-live="polite">
-      <h1>Ocorrência registrada</h1>
-      <div class="card">
-        <p class="aviso" style="margin:0">Seu protocolo</p>
-        <div class="protocolo" id="protocolo"></div>
-        <p>Guarde este número. Enviamos uma confirmação para o seu e-mail (confira também a caixa de spam). Vamos analisar e responder por lá.</p>
-        <div class="acoes">
-          <button type="button" class="sec" id="copiar">Copiar protocolo</button>
-          <a class="btn" id="ver-status" href="consulta.html">Acompanhar atendimento</a>
+    <section id="tela-ok" class="estreito-ok oculto" aria-live="polite">
+      <div class="sucesso">
+        <div class="ico"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1e7d4f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+        <h1>Ocorrência registrada</h1>
+        <p>Recebemos o seu relato. Guarde o número abaixo.</p>
+      </div>
+      <div class="card ticket">
+        <div class="topo-ticket">
+          <p class="rotulo">Seu protocolo</p>
+          <p class="protocolo" id="protocolo"></p>
+          <button type="button" class="copiar" id="copiar">Copiar protocolo</button>
+        </div>
+        <div class="corpo">
+          <p class="email-info">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c73e00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 8 8 6 8-6"/></svg>
+            <span>Enviamos a confirmação para o seu e-mail. Se não encontrar, confira também a caixa de spam.</span>
+          </p>
+          <h2>O que acontece agora</h2>
+          <ol class="linha-tempo">
+            <li><span class="bolinha feito">✓</span><span><strong>Recebida</strong><br>Seu relato já está com a nossa equipe.</span></li>
+            <li><span class="bolinha">2</span><span><strong>Em análise</strong><br>Conferimos o pedido e os detalhes que você enviou.</span></li>
+            <li><span class="bolinha">3</span><span><strong>Resposta por e-mail</strong><br>Você também acompanha tudo na página de consulta.</span></li>
+          </ol>
+          <div class="acoes">
+            <a class="btn" id="ver-status" href="consulta.html">Acompanhar atendimento</a>
+            <a class="btn sec" href="index.html">Nova ocorrência</a>
+          </div>
         </div>
       </div>
     </section>
   </main>
-  <footer id="rodape"></footer>
+  <footer><span id="rodape"></span><span id="suporte"></span></footer>
   <script src="app.js"></script>
 </body>
 </html>
