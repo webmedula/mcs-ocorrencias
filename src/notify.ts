@@ -74,6 +74,13 @@ function getTransporter() {
   return transporter;
 }
 
+/** Extrai o endereço de "Nome <a@b.c>" ou "a@b.c". */
+export function enderecoDe(valor: string): string {
+  const m = valor.match(/<([^>]+)>/);
+  return (m ? m[1] : valor).trim().toLowerCase();
+}
+const dominioDe = (email: string) => email.split("@")[1] ?? "";
+
 /** Descreve um erro de SMTP de forma útil para o log (código + comando + mensagem). */
 export function descreverErroMail(e: any): string {
   const partes = [e?.code, e?.command ? `comando=${e.command}` : "", e?.responseCode ? `resposta=${e.responseCode}` : "", e?.message]
@@ -89,6 +96,13 @@ export async function verificarSmtp(): Promise<void> {
     return;
   }
   const alvo = `${config.smtpHost}:${config.smtpPort} (${config.smtpSecure ? "TLS direto" : "STARTTLS"})`;
+  const remetente = enderecoDe(config.mailFrom);
+  console.log(`[mail] Remetente (From): ${config.mailFrom}${config.mailFromDefinido ? "" : "  (MAIL_FROM não definido; usando o usuário do SMTP)"}`);
+  if (/example\.(com|org|net)$/i.test(remetente)) {
+    console.error("[mail] ATENÇÃO: o remetente é um endereço de exemplo. Defina MAIL_FROM com um endereço real do seu domínio, senão os destinos recusam a mensagem.");
+  } else if (config.smtpUser.includes("@") && dominioDe(remetente) !== dominioDe(config.smtpUser.toLowerCase())) {
+    console.error(`[mail] ATENÇÃO: o domínio do remetente (${dominioDe(remetente)}) é diferente do domínio do login SMTP (${dominioDe(config.smtpUser.toLowerCase())}). Isso costuma causar rejeição ou spam.`);
+  }
   try {
     await t.verify();
     console.log(`[mail] SMTP verificado: conexão, TLS e login OK em ${alvo}`);
@@ -126,14 +140,17 @@ export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
     console.log(`[mail] SMTP não configurado; confirmação de ${o.protocolo} para ${o.email} NÃO enviada.`);
     return;
   }
+  // Remetente do envelope (Return-Path) = conta autenticada: as devoluções voltam para uma caixa real.
+  const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
   const info = await t.sendMail({
     from: config.mailFrom,
+    envelope: { from: envelopeFrom, to: o.email },
     to: o.email,
     subject: `Protocolo ${o.protocolo} — recebemos sua ocorrência`,
     html,
     text: `Recebemos sua ocorrência. Protocolo: ${o.protocolo}. Acompanhe em: ${link}`,
   });
   console.log(
-    `[mail] enviado ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} recusados=${JSON.stringify(info.rejected)} · resposta="${info.response}"`,
+    `[mail] enviado ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} recusados=${JSON.stringify(info.rejected)} · resposta="${info.response}" · from="${config.mailFrom}" envelope=${envelopeFrom}`,
   );
 }

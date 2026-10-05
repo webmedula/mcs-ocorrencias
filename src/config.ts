@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.0.4",
+  version: "1.0.5",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -30,7 +30,13 @@ export const config = {
   smtpPass: env.SMTP_PASS ?? "",
   // Opcional: nome que consta no certificado do servidor (ver DEPLOY-EASYPANEL.md)
   smtpTlsServername: env.SMTP_TLS_SERVERNAME ?? "",
-  mailFrom: env.MAIL_FROM ?? "Central de Ocorrências <no-reply@example.com>",
+  // Remetente: usa MAIL_FROM; se vazio, usa "<BRAND_NAME> <SMTP_USER>" (nunca um endereço de exemplo).
+  mailFrom:
+    env.MAIL_FROM?.trim() ||
+    ((env.SMTP_USER ?? "").includes("@")
+      ? `${env.BRAND_NAME ?? "Central de Ocorrências"} <${env.SMTP_USER}>`
+      : "Central de Ocorrências <no-reply@example.com>"),
+  mailFromDefinido: Boolean(env.MAIL_FROM?.trim()),
   publicUrl: env.PUBLIC_URL ?? "http://localhost:3000",
 };
 

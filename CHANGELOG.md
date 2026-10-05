@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.5 — 2026-10-05
+
+Correção do remetente dos e-mails de confirmação.
+
+- **Correção:** sem `MAIL_FROM`, o remetente passava a ser `no-reply@example.com` (endereço de exemplo). O servidor de e-mail aceitava a mensagem, mas os destinos a recusavam e nada chegava. Agora, sem `MAIL_FROM`, o remetente é `<BRAND_NAME> <SMTP_USER>`.
+- O remetente do envelope (Return-Path) passa a ser sempre a conta autenticada (`SMTP_USER`), para que devoluções cheguem a uma caixa real.
+- Ao iniciar, o log mostra o remetente em uso e avisa se ele for um endereço de exemplo ou de domínio diferente do login SMTP.
+- O log de cada envio inclui o `from` e o `envelope` usados.
+
 ## v1.0.4 — 2026-10-05
 
 Diagnóstico do e-mail. Nenhuma mudança visível para o cliente.
