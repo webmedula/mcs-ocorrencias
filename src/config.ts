@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.0.6",
+  version: "1.1.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -38,6 +38,12 @@ export const config = {
       : "Central de Ocorrências <no-reply@example.com>"),
   mailFromDefinido: Boolean(env.MAIL_FROM?.trim()),
   publicUrl: env.PUBLIC_URL ?? "http://localhost:3000",
+  // Painel interno: o primeiro gerente é criado a partir destas variáveis (só se ainda não houver usuários).
+  adminEmail: (env.ADMIN_EMAIL ?? "").trim().toLowerCase(),
+  adminPassword: env.ADMIN_PASSWORD ?? "",
+  adminName: env.ADMIN_NAME ?? "Gerente",
+  // Duração do login no painel, em horas
+  sessionHours: Number(env.SESSION_HOURS ?? 12),
 };
 
 export const CANAIS = {

@@ -38,13 +38,19 @@ PRIVACY_URL=<link da política de privacidade>
 TELEGRAM_BOT_TOKEN=<mesmo bot do Gerente, ou um bot novo>
 TELEGRAM_CHAT_ID=<grupo/chat que recebe os avisos>
 
-SMTP_HOST=mail.mcs.ind.br
+# E-mail pelo Resend (o SMTP da HostGator não entregava)
+SMTP_HOST=smtp.resend.com
 SMTP_PORT=465
 SMTP_SECURE=true
-SMTP_USER=atendimento@mcs.ind.br
-SMTP_PASS=<senha da conta atendimento@mcs.ind.br — digite só no Easypanel>
-SMTP_TLS_SERVERNAME=      # deixe vazio; use só se der erro de certificado (veja abaixo)
-MAIL_FROM=MCS Brasil <atendimento@mcs.ind.br>
+SMTP_USER=resend
+SMTP_PASS=<chave re_... do Resend — digite só no Easypanel>
+MAIL_FROM=MCS Brasil <atendimento@send.mcs.ind.br>
+# (SMTP_TLS_SERVERNAME: deixe vazio)
+
+# Painel interno (/painel) — v1.1.0
+ADMIN_NAME=<nome do gerente>
+ADMIN_EMAIL=<e-mail do gerente>
+ADMIN_PASSWORD=<senha com 10+ caracteres — remova depois do 1º acesso>
 
 TINY_TOKEN=            # veja a observação sobre o Tiny abaixo
 ```
@@ -82,3 +88,12 @@ Inclua o volume `ocorrencias-data` na rotina de backup do VPS (banco `ocorrencia
 ## Atualizar depois
 
 Suba a nova versão no GitHub, espere o Actions publicar, troque a tag da imagem no Easypanel e faça o deploy. O volume preserva os dados.
+
+
+## Painel interno (v1.1.0)
+
+1. No Easypanel, acrescente `ADMIN_NAME`, `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mínimo 10 caracteres) e implante. O log mostra `[painel] Primeiro gerente criado`.
+2. Entre em https://atendimento.mcs.ind.br/painel, abra **Equipe** e crie as contas do atendimento.
+3. Volte ao Easypanel e **apague `ADMIN_PASSWORD`**. As contas já estão no banco (volume `/data`), então isso é seguro.
+4. O banco e as fotos continuam no volume `/data`: o backup desse volume agora também guarda usuários e chaves.
+5. Gerente IA: veja `API-GERENTE-IA.md`.

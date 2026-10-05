@@ -86,6 +86,12 @@ A v1.0.0 usa a **API v2 por token** (`pedidos.pesquisa.php`), buscando primeiro 
 
 `ocorrencias` (dados e status), `anexos` (fotos) e `eventos` (histórico; `publico=1` aparece na consulta do cliente). Status: `nova`, `em_analise`, `aguardando_cliente`, `resolvida`.
 
-## Próxima versão (v1.1.0)
+## Painel interno (v1.1.0)
 
-Painel interno com login: lista e filtros por canal/status, ver fotos e dados do Tiny, mudar status, notas internas e mensagem pública ao cliente (com e-mail automático).
+Em `/painel`. Perfis: **gerente** (tudo, mais equipe e chaves) e **atendimento** (triagem: status, notas, respostas, fotos).
+
+1. Defina `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mín. 10 caracteres) e reinicie: o primeiro gerente é criado. Depois remova `ADMIN_PASSWORD`.
+2. Entre em `/painel`, abra **Equipe** e crie as contas do atendimento.
+3. Para o Gerente IA, gere uma chave em **Equipe → Chaves do Gerente IA** e veja `API-GERENTE-IA.md`.
+
+Uma lista de usuários esquecidos ou de chaves fica sempre visível na aba Equipe; desativar um usuário derruba as sessões dele na hora.

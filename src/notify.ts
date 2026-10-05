@@ -42,6 +42,8 @@ export async function avisarTelegram(o: OcorrenciaResumo): Promise<void> {
     `Fotos: ${o.qtdFotos}`,
     "",
     esc(desc),
+    "",
+    `<a href="${esc(config.publicUrl)}/painel#${encodeURIComponent(o.protocolo)}">Abrir no painel</a>`,
   ].join("\n");
 
   const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
@@ -131,7 +133,7 @@ export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
        <b>Assunto:</b> ${esc(TIPOS[o.tipo])}</p>
     <p>Vamos analisar e responder neste e-mail${o.telefone ? " ou pelo telefone informado" : ""}.
        Guarde o protocolo: ele identifica o seu atendimento.</p>
-    <p><a href="${esc(link)}" style="background:#1b5e8f;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Acompanhar atendimento</a></p>
+    <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:12px 18px;border-radius:10px;font-weight:bold;text-decoration:none">Acompanhar atendimento</a></p>
     <p style="font-size:12px;color:#777">Se a compra foi feita em um marketplace, mantenha também a reclamação aberta na plataforma, se existir.</p>
   </div>`;
 
@@ -155,4 +157,35 @@ export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
   console.log(
     `[mail] enviado ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} recusados=${JSON.stringify(info.rejected)} · resposta="${info.response}" · from="${config.mailFrom}" envelope=${envelopeFrom}`,
   );
+}
+
+/** Resposta pública da equipe ao cliente (e-mail). Lança em caso de falha, para o painel avisar quem respondeu. */
+export async function enviarResposta(o: { protocolo: string; nome: string; email: string }, texto: string): Promise<boolean> {
+  const link = `${config.publicUrl}/consulta.html?protocolo=${encodeURIComponent(o.protocolo)}`;
+  const corpoHtml = esc(texto).replace(/\n/g, "<br>");
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
+    <h2 style="margin-bottom:4px">${esc(config.brandName)}</h2>
+    <p>Olá, ${esc(o.nome)}. Temos uma atualização sobre o seu atendimento <b>${esc(o.protocolo)}</b>:</p>
+    <div style="background:#fff3eb;border-left:4px solid #f55000;padding:12px 16px;border-radius:6px">${corpoHtml}</div>
+    <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:bold">Ver o atendimento</a></p>
+    <p style="font-size:12px;color:#777">Você pode responder a este e-mail.</p>
+  </div>`;
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[mail] SMTP não configurado; resposta ao protocolo ${o.protocolo} NÃO enviada.`);
+    return false;
+  }
+  const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
+  const info = await t.sendMail({
+    from: config.mailFrom,
+    ...(config.supportEmail.includes("@") ? { replyTo: config.supportEmail } : {}),
+    envelope: { from: envelopeFrom, to: o.email },
+    to: o.email,
+    subject: `Protocolo ${o.protocolo} — atualização do seu atendimento`,
+    html,
+    text: `${texto}\n\nProtocolo: ${o.protocolo}\nAcompanhe em: ${link}`,
+  });
+  console.log(`[mail] resposta ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} · resposta="${info.response}"`);
+  return info.accepted.length > 0;
 }

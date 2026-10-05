@@ -1,4 +1,4 @@
-/* Central de Ocorrências v1.0.6
+/* Central de Ocorrências v1.1.0
    Identidade visual: troque apenas as variáveis abaixo. Fontes hospedadas aqui (sem Google). */
 @font-face { font-family: "DM Sans"; font-weight: 400; font-display: swap; src: url("fonts/dm-sans-latin-400-normal.woff2") format("woff2"); }
 @font-face { font-family: "DM Sans"; font-weight: 500; font-display: swap; src: url("fonts/dm-sans-latin-500-normal.woff2") format("woff2"); }
@@ -94,7 +94,7 @@ label { display: block; font-weight: 700; font-size: .875rem; margin: 18px 0 6px
 fieldset > label:first-of-type, .linha label { margin-top: 0; }
 .dica { font-weight: 400; color: var(--suave); font-size: .85rem; }
 .ajuda { margin: 6px 0 0; font-size: .8rem; color: var(--suave); }
-input[type=text], input[type=email], input[type=tel], input[type=search], select, textarea {
+input[type=text], input[type=email], input[type=tel], input[type=search], input[type=password], select, textarea {
   width: 100%; font: inherit; color: var(--texto); background: #fff;
   border: 1.5px solid var(--campo); border-radius: 12px; padding: 12px 14px; min-height: 48px;
 }

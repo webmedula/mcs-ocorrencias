@@ -11,6 +11,8 @@ import { config, CANAIS, TIPOS, STATUS, type Canal, type Tipo, type Status } fro
 import { db } from "./db.js";
 import { gerarProtocolo, hashIp } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
+import { admin } from "./admin.js";
+import { garantirPrimeiroGerente, limparSessoesVencidas } from "./auth.js";
 import { avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +108,7 @@ const limiteConsulta = rateLimit({
 });
 
 // ---------- Rotas ----------
+app.use("/api/admin", admin);
 app.get("/api/config", (_req, res) => {
   res.json({
     versao: config.version,
@@ -264,6 +267,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   console.error("[erro]", err);
   res.status(500).json({ erro: "Erro interno." });
 });
+
+garantirPrimeiroGerente();
+limparSessoesVencidas();
+setInterval(limparSessoesVencidas, 60 * 60 * 1000).unref();
 
 app.listen(config.port, () => {
   verificarSmtp();

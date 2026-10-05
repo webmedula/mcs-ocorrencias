@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.1.0 — 2026-10-05
+
+Painel interno de triagem, com login da equipe e acesso do Gerente IA.
+
+- **Painel** em `/painel`: lista com filtros (canal, status, busca por protocolo, pedido, nome ou e-mail) e contadores por status; detalhe com relato, dados do Tiny, fotos, histórico; mudança de status; nota interna; resposta ao cliente por e-mail (também aparece na consulta); layout para celular e computador.
+- **Login por usuário e senha** com dois perfis: *gerente* (também administra a equipe e as chaves) e *atendimento*. Contas criadas e desativadas dentro do painel (aba Equipe). O primeiro gerente nasce de `ADMIN_EMAIL` e `ADMIN_PASSWORD`.
+- **Gerente IA**: chaves de API (`Authorization: Bearer mcsia_…`) geradas e revogadas pelo gerente. A IA lista e lê ocorrências, muda status e anota; **não** responde clientes nem vê fotos. Ver `API-GERENTE-IA.md`.
+- Histórico mostra **quem** fez cada ação (pessoa ou Gerente IA). Notas internas nunca aparecem para o cliente.
+- Segurança: senhas com scrypt; cookie de sessão HttpOnly, SameSite=Strict e Secure; proteção extra contra CSRF; limite de 10 tentativas de login por 15 min; fotos só para quem está logado; chaves guardadas só como hash.
+- O aviso no Telegram ganhou o link "Abrir no painel".
+- O botão do e-mail de confirmação passou para o laranja da MCS.
+
 ## v1.0.6 — 2026-10-05
 
 Novo visual da Central e e-mail com Reply-To.

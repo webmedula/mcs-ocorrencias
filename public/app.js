@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.0.6 — formulário
+// Central de Ocorrências v1.1.0 — formulário
 (async function () {
   const $ = (s) => document.querySelector(s);
   const form = $("#form");

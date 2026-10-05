@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Painel de triagem</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="painel.css">
+</head>
+<body class="painel">
+  <header class="topo">
+    <div class="in largo">
+      <div class="marca-painel">
+        <a class="logo" href="painel" aria-label="Painel MCS Brasil"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a>
+        <span class="titulo-painel">Triagem de ocorrências</span>
+      </div>
+      <nav id="menu" class="menu oculto" aria-label="Painel">
+        <button type="button" class="aba ativa" data-aba="ocorrencias">Ocorrências</button>
+        <button type="button" class="aba oculto" data-aba="equipe" id="aba-equipe">Equipe</button>
+        <button type="button" class="aba" data-aba="conta">Minha conta</button>
+        <span id="quem" class="quem"></span>
+        <button type="button" class="sair" id="sair">Sair</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="largo" id="raiz">
+    <!-- Login -->
+    <section id="v-login" class="oculto">
+      <form id="f-login" class="card simples login" novalidate>
+        <h1 class="menor">Entrar no painel</h1>
+        <p class="sub">Acesso restrito à equipe da MCS.</p>
+        <div id="login-erro" class="erro-geral oculto" role="alert"></div>
+        <label for="l-email">E-mail</label>
+        <input type="email" id="l-email" autocomplete="username" required>
+        <label for="l-senha">Senha</label>
+        <input type="password" id="l-senha" autocomplete="current-password" required>
+        <button type="submit" class="primario">Entrar</button>
+      </form>
+    </section>
+
+    <!-- Ocorrências -->
+    <section id="v-ocorrencias" class="oculto">
+      <div class="kpis" id="kpis"></div>
+      <div class="duas">
+        <section class="lista card-lista" aria-label="Lista de ocorrências">
+          <div class="filtros">
+            <label class="so-leitor" for="f-busca">Buscar</label>
+            <input type="search" id="f-busca" placeholder="Buscar protocolo, pedido, nome ou e-mail" autocomplete="off">
+            <label class="so-leitor" for="f-canal">Canal</label>
+            <select id="f-canal"><option value="">Todos os canais</option></select>
+            <label class="so-leitor" for="f-status">Status</label>
+            <select id="f-status"><option value="">Todos os status</option></select>
+          </div>
+          <div class="tabela-rolagem">
+            <table>
+              <thead><tr><th scope="col">Protocolo</th><th scope="col" class="col-m">Canal</th><th scope="col" class="col-m">Assunto</th><th scope="col">Status</th></tr></thead>
+              <tbody id="linhas"></tbody>
+            </table>
+          </div>
+          <p id="vazio" class="vazio oculto">Nenhuma ocorrência encontrada.</p>
+          <div class="paginacao">
+            <button type="button" class="sec mini" id="p-ant">Anterior</button>
+            <span id="p-info"></span>
+            <button type="button" class="sec mini" id="p-prox">Próxima</button>
+          </div>
+        </section>
+        <section class="detalhe card" id="detalhe" aria-label="Detalhe da ocorrência" tabindex="-1">
+          <p class="vazio" id="detalhe-vazio">Selecione uma ocorrência na lista.</p>
+        </section>
+      </div>
+    </section>
+
+    <!-- Equipe (gerente) -->
+    <section id="v-equipe" class="oculto">
+      <h1 class="menor">Equipe</h1>
+      <div class="duas">
+        <div class="card simples">
+          <h2>Usuários</h2>
+          <div class="tabela-rolagem"><table><thead><tr><th scope="col">Nome</th><th scope="col">Perfil</th><th scope="col">Situação</th><th scope="col"><span class="so-leitor">Ações</span></th></tr></thead><tbody id="usuarios"></tbody></table></div>
+          <h3>Novo usuário</h3>
+          <form id="f-usuario" novalidate>
+            <div id="usuario-erro" class="erro-geral oculto" role="alert"></div>
+            <label for="u-nome">Nome</label><input type="text" id="u-nome" maxlength="120" required>
+            <label for="u-email">E-mail (é o login)</label><input type="email" id="u-email" required>
+            <label for="u-senha">Senha inicial <span class="dica">(mínimo 10 caracteres)</span></label><input type="password" id="u-senha" autocomplete="new-password" required>
+            <label for="u-papel">Perfil</label>
+            <select id="u-papel"><option value="atendimento">Atendimento</option><option value="gerente">Gerente (administra a equipe)</option></select>
+            <button type="submit" class="primario">Criar usuário</button>
+          </form>
+        </div>
+        <div class="card simples">
+          <h2>Chaves do Gerente IA</h2>
+          <p class="aviso">Permitem ao Gerente IA listar e ler ocorrências, mudar status e anotar. Não permitem responder clientes nem ver fotos.</p>
+          <div id="chave-nova" class="chave-nova oculto" role="status">
+            <strong>Copie agora: esta chave não será mostrada de novo.</strong>
+            <code id="chave-token"></code>
+            <button type="button" class="sec mini" id="chave-copiar">Copiar chave</button>
+          </div>
+          <ul id="chaves" class="chaves"></ul>
+          <form id="f-chave" class="linha-form" novalidate>
+            <div id="chave-erro" class="erro-geral oculto" role="alert"></div>
+            <label for="k-nome">Nome da chave</label><input type="text" id="k-nome" maxlength="60" placeholder="Ex.: Gerente IA (Telegram)" required>
+            <button type="submit" class="primario">Gerar chave</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Conta -->
+    <section id="v-conta" class="oculto">
+      <h1 class="menor">Minha conta</h1>
+      <form id="f-senha" class="card simples login" novalidate>
+        <div id="senha-erro" class="erro-geral oculto" role="alert"></div>
+        <p id="senha-ok" class="ok-msg oculto" role="status">Senha alterada.</p>
+        <label for="s-atual">Senha atual</label><input type="password" id="s-atual" autocomplete="current-password" required>
+        <label for="s-nova">Nova senha <span class="dica">(mínimo 10 caracteres)</span></label><input type="password" id="s-nova" autocomplete="new-password" required>
+        <button type="submit" class="primario">Trocar senha</button>
+      </form>
+    </section>
+  </main>
+  <footer><span id="rodape"></span></footer>
+  <script src="painel.js"></script>
+</body>
+</html>
