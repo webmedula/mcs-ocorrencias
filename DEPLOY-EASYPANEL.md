@@ -1,4 +1,4 @@
-# Deploy no Easypanel — Central de Ocorrências v1.0.3
+# Deploy no Easypanel — Central de Ocorrências v1.0.4
 
 Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.mcs.ind.br**
 (o DNS `*.mcs.ind.br` já aponta para o VPS, então não é preciso criar registro).
@@ -6,7 +6,7 @@ Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.
 ## 1. Repositório e imagem (uma vez)
 
 1. Crie um repositório privado no GitHub (ex.: `mcs-ocorrencias`) e suba o conteúdo desta pasta (sem `node_modules`, `dist`, `.env`).
-2. O workflow `.github/workflows/docker.yml` roda sozinho a cada push na `main` e publica `ghcr.io/<usuario>/mcs-ocorrencias:latest` e `:1.0.3`. Confira em **Actions** que terminou verde.
+2. O workflow `.github/workflows/docker.yml` roda sozinho a cada push na `main` e publica `ghcr.io/<usuario>/mcs-ocorrencias:latest` e `:1.0.4`. Confira em **Actions** que terminou verde.
 3. Em **Packages** do GitHub, se o repositório for privado, o Easypanel precisa de credencial para baixar a imagem (a mesma que você configurou para o ml-actions serve). Se preferir, deixe o pacote público: a imagem não contém segredos, eles entram só por variáveis de ambiente.
 
 ## 2. Criar o serviço no Easypanel
@@ -15,7 +15,7 @@ Projeto **mcs** → **+ Serviço** → **App**, nome `mcs-ocorrencias`.
 
 | Campo | Valor |
 |---|---|
-| Fonte | Imagem Docker: `ghcr.io/<usuario>/mcs-ocorrencias:1.0.3` (fixe a versão em vez de `latest`, assim você sabe o que está rodando) |
+| Fonte | Imagem Docker: `ghcr.io/<usuario>/mcs-ocorrencias:1.0.4` (fixe a versão em vez de `latest`, assim você sabe o que está rodando) |
 | Domínio | `atendimento.mcs.ind.br`, porta **3000**, HTTPS ligado (Let's Encrypt automático) |
 | Volume | Tipo *Volume*, nome `ocorrencias-data`, caminho de montagem **`/data`** |
 | Réplicas | **1** (o banco é SQLite; não escale para mais de uma) |
@@ -63,7 +63,7 @@ Esta versão consulta o Tiny pela **API v2 com token**. Os serviços da MCS que 
 
 ## 4. Validar
 
-1. Abra `https://atendimento.mcs.ind.br/healthz`: deve responder `{"ok":true,"versao":"1.0.3"}`.
+1. Abra `https://atendimento.mcs.ind.br/healthz`: deve responder `{"ok":true,"versao":"1.0.4"}`.
 2. Abra `https://atendimento.mcs.ind.br/?canal=shopee` e registre uma ocorrência de teste com uma foto.
 3. Confira: protocolo na tela, aviso no Telegram e e-mail de confirmação (olhe o spam na primeira vez). Se o e-mail não chegar, veja os logs do serviço no Easypanel: a linha começa com `[mail]` e diz o motivo.
 4. Consulte o protocolo em `/consulta.html`.

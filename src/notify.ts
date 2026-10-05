@@ -74,6 +74,36 @@ function getTransporter() {
   return transporter;
 }
 
+/** Descreve um erro de SMTP de forma útil para o log (código + comando + mensagem). */
+export function descreverErroMail(e: any): string {
+  const partes = [e?.code, e?.command ? `comando=${e.command}` : "", e?.responseCode ? `resposta=${e.responseCode}` : "", e?.message]
+    .filter(Boolean);
+  return partes.join(" · ");
+}
+
+/** Testa conexão, TLS e login no SMTP ao iniciar. Nunca lança. */
+export async function verificarSmtp(): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    console.log("[mail] SMTP desligado (SMTP_HOST vazio): confirmações por e-mail não serão enviadas.");
+    return;
+  }
+  const alvo = `${config.smtpHost}:${config.smtpPort} (${config.smtpSecure ? "TLS direto" : "STARTTLS"})`;
+  try {
+    await t.verify();
+    console.log(`[mail] SMTP verificado: conexão, TLS e login OK em ${alvo}`);
+  } catch (e: any) {
+    console.error(`[mail] FALHA ao verificar SMTP em ${alvo}: ${descreverErroMail(e)}`);
+    if (/altnames|certificate/i.test(String(e?.message))) {
+      console.error("[mail] Dica: defina SMTP_TLS_SERVERNAME com o nome que aparece no erro de certificado.");
+    } else if (/ETIMEDOUT|ECONNREFUSED|ESOCKET|ENETUNREACH/i.test(String(e?.code))) {
+      console.error("[mail] Dica: a porta pode estar bloqueada no VPS. Teste SMTP_PORT=587 e SMTP_SECURE=false.");
+    } else if (/EAUTH/i.test(String(e?.code))) {
+      console.error("[mail] Dica: confira SMTP_USER e SMTP_PASS (a senha da conta de e-mail).");
+    }
+  }
+}
+
 export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
   const link = `${config.publicUrl}/consulta.html?protocolo=${encodeURIComponent(o.protocolo)}`;
   const html = `
@@ -96,11 +126,14 @@ export async function enviarConfirmacao(o: OcorrenciaResumo): Promise<void> {
     console.log(`[mail] SMTP não configurado; confirmação de ${o.protocolo} para ${o.email} NÃO enviada.`);
     return;
   }
-  await t.sendMail({
+  const info = await t.sendMail({
     from: config.mailFrom,
     to: o.email,
     subject: `Protocolo ${o.protocolo} — recebemos sua ocorrência`,
     html,
     text: `Recebemos sua ocorrência. Protocolo: ${o.protocolo}. Acompanhe em: ${link}`,
   });
+  console.log(
+    `[mail] enviado ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} recusados=${JSON.stringify(info.rejected)} · resposta="${info.response}"`,
+  );
 }

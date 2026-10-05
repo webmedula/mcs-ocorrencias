@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.4 — 2026-10-05
+
+Diagnóstico do e-mail. Nenhuma mudança visível para o cliente.
+
+- Ao iniciar, a central testa o SMTP (conexão, TLS e login) e registra o resultado no log: `[mail] SMTP verificado…` ou `[mail] FALHA ao verificar SMTP…`, com o código do erro e uma dica do que ajustar.
+- Cada envio de confirmação agora é registrado: `[mail] enviado <protocolo> para <e-mail> · aceitos=… recusados=… · resposta=…`.
+- Falhas de envio mostram código, comando e resposta do servidor (antes só a mensagem).
+
 ## v1.0.3 — 2026-10-05
 
 Configuração de e-mail da MCS. Sem mudança de funcionalidade.

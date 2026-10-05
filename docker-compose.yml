@@ -1,8 +1,8 @@
-# Central de Ocorrências v1.0.3
+# Central de Ocorrências v1.0.4
 services:
   ocorrencias:
     build: .
-    image: central-ocorrencias:1.0.3
+    image: central-ocorrencias:1.0.4
     container_name: central-ocorrencias
     restart: unless-stopped
     env_file: .env

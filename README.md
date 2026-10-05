@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.0.3
+# Central de Ocorrências — v1.0.4
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.0.3** (guia de deploy no Easypanel: `DEPLOY-EASYPANEL.md`) (veja `CHANGELOG.md`). O painel interno de triagem fica para a v1.1.0.
+> Versão atual: **1.0.4** (guia de deploy no Easypanel: `DEPLOY-EASYPANEL.md`) (veja `CHANGELOG.md`). O painel interno de triagem fica para a v1.1.0.
 
 ## Como funciona
 

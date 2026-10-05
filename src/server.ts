@@ -11,7 +11,7 @@ import { config, CANAIS, TIPOS, STATUS, type Canal, type Tipo, type Status } fro
 import { db } from "./db.js";
 import { gerarProtocolo, hashIp } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
-import { avisarTelegram, enviarConfirmacao, type OcorrenciaResumo } from "./notify.js";
+import { avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, "../public");
@@ -205,7 +205,7 @@ app.post("/api/ocorrencias", limiteEnvio, upload.array("fotos", 5), async (req, 
   };
   // Notificações não bloqueiam nem derrubam o envio
   avisarTelegram(resumo).catch((e) => console.error("[telegram]", e.message));
-  enviarConfirmacao(resumo).catch((e) => console.error("[mail]", e.message));
+  enviarConfirmacao(resumo).catch((e) => console.error(`[mail] FALHA ao enviar ${protocolo} para ${d.email}: ${descreverErroMail(e)}`));
 
   res.status(201).json({ protocolo });
 });
@@ -265,6 +265,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 app.listen(config.port, () => {
+  verificarSmtp();
   console.log(`Central de Ocorrências v${config.version} em http://localhost:${config.port}`);
   console.log(
     `Tiny: ${config.tinyToken ? "on" : "off"} · Telegram: ${config.telegramToken ? "on" : "off"} · SMTP: ${config.smtpHost ? "on" : "off"}`,

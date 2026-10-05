@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.0.3 — consulta de protocolo
+// Central de Ocorrências v1.0.4 — consulta de protocolo
 (async function () {
   const $ = (s) => document.querySelector(s);
   const fmt = (iso) => new Date(iso.replace(" ", "T") + "Z").toLocaleString("pt-BR");
