@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Registrar ocorrência</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="Página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a href="consulta.html">Consultar protocolo</a></div></header>
+
+  <main>
+    <section id="tela-form">
+      <h1>Registrar ocorrência</h1>
+      <p class="sub">Teve algum problema com a sua compra? Conte para a gente. Você recebe um protocolo para acompanhar.</p>
+
+      <form id="form" novalidate enctype="multipart/form-data">
+        <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
+
+        <div class="card">
+          <h2>1. Onde você comprou?</h2>
+          <div class="canais" id="canais" role="radiogroup" aria-label="Canal da compra"></div>
+          <div class="erro-campo" data-erro="canal"></div>
+
+          <label for="pedido">Número do pedido <span class="dica">(está na sua compra ou na nota fiscal)</span></label>
+          <input type="text" id="pedido" name="pedido" maxlength="60" autocomplete="off" inputmode="text" required>
+          <div class="erro-campo" data-erro="pedido"></div>
+        </div>
+
+        <div class="card">
+          <h2>2. O que aconteceu?</h2>
+          <label for="tipo">Assunto</label>
+          <select id="tipo" name="tipo" required><option value="">Selecione…</option></select>
+          <div class="erro-campo" data-erro="tipo"></div>
+
+          <label for="descricao">Descreva o problema</label>
+          <textarea id="descricao" name="descricao" maxlength="3000" required></textarea>
+          <div class="erro-campo" data-erro="descricao"></div>
+
+          <label for="fotos">Fotos <span class="dica">(opcional · até 5 · JPG, PNG ou WebP · 5 MB cada)</span></label>
+          <input type="file" id="fotos" name="fotos" accept="image/jpeg,image/png,image/webp" multiple>
+          <div class="fotos" id="previa"></div>
+          <div class="erro-campo" data-erro="fotos"></div>
+        </div>
+
+        <div class="card">
+          <h2>3. Seus dados</h2>
+          <label for="nome">Nome</label>
+          <input type="text" id="nome" name="nome" maxlength="120" autocomplete="name" required>
+          <div class="erro-campo" data-erro="nome"></div>
+
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" maxlength="160" autocomplete="email" required>
+          <div class="erro-campo" data-erro="email"></div>
+
+          <label for="telefone">Telefone ou WhatsApp <span class="dica">(opcional)</span></label>
+          <input type="tel" id="telefone" name="telefone" maxlength="30" autocomplete="tel">
+          <div class="erro-campo" data-erro="telefone"></div>
+
+          <!-- honeypot: pessoas não veem; robôs preenchem -->
+          <div class="hp" aria-hidden="true"><label>Site <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+
+          <label class="check" for="consentimento">
+            <input type="checkbox" id="consentimento" name="consentimento" value="true">
+            <span>Concordo que meus dados sejam usados para atender esta ocorrência.
+              <a id="link-privacidade" class="oculto" href="#" target="_blank" rel="noopener">Política de privacidade</a></span>
+          </label>
+          <div class="erro-campo" data-erro="consentimento"></div>
+        </div>
+
+        <p class="aviso" id="aviso-marketplace">Se a compra foi feita em um marketplace e você já abriu uma reclamação lá, mantenha-a aberta. Esta central registra o seu caso diretamente com a empresa.</p>
+        <button type="submit" id="enviar">Enviar ocorrência</button>
+      </form>
+    </section>
+
+    <section id="tela-ok" class="oculto" aria-live="polite">
+      <h1>Ocorrência registrada</h1>
+      <div class="card">
+        <p class="aviso" style="margin:0">Seu protocolo</p>
+        <div class="protocolo" id="protocolo"></div>
+        <p>Guarde este número. Enviamos uma confirmação para o seu e-mail (confira também a caixa de spam). Vamos analisar e responder por lá.</p>
+        <div class="acoes">
+          <button type="button" class="sec" id="copiar">Copiar protocolo</button>
+          <a class="btn" id="ver-status" href="consulta.html">Acompanhar atendimento</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer id="rodape"></footer>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Consultar protocolo</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="Página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span><a href="index.html">Nova ocorrência</a></div></header>
+  <main>
+    <h1>Consultar atendimento</h1>
+    <p class="sub">Informe o protocolo e o e-mail usado no registro.</p>
+
+    <form id="form" class="card" novalidate>
+      <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
+      <label for="protocolo">Protocolo</label>
+      <input type="text" id="protocolo" autocomplete="off" autocapitalize="characters" required>
+      <label for="email">E-mail</label>
+      <input type="email" id="email" autocomplete="email" required>
+      <div style="margin-top:16px"><button type="submit" id="buscar">Consultar</button></div>
+    </form>
+
+    <section id="resultado" class="card oculto" aria-live="polite">
+      <span class="status" id="status"></span>
+      <p style="margin:12px 0 0"><b id="r-protocolo"></b><br>
+        <span class="aviso" id="r-meta"></span></p>
+      <ul class="hist" id="hist"></ul>
+    </section>
+  </main>
+  <footer id="rodape"></footer>
+  <script src="consulta.js"></script>
+</body>
+</html>

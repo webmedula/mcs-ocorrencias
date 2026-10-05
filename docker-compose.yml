@@ -1,0 +1,14 @@
+# Central de Ocorrências v1.0.3
+services:
+  ocorrencias:
+    build: .
+    image: central-ocorrencias:1.0.3
+    container_name: central-ocorrencias
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:3000:3000"   # exponha via Nginx/Traefik com HTTPS
+    volumes:
+      - ./data:/data
