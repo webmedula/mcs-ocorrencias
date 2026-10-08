@@ -1,4 +1,4 @@
-# Deploy no Easypanel — Central de Ocorrências v1.0.5
+# Deploy no Easypanel — Central de Ocorrências v1.2.0
 
 Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.mcs.ind.br**
 (o DNS `*.mcs.ind.br` já aponta para o VPS, então não é preciso criar registro).
@@ -52,6 +52,10 @@ ADMIN_NAME=<nome do gerente>
 ADMIN_EMAIL=<e-mail do gerente>
 ADMIN_PASSWORD=<senha com 10+ caracteres — remova depois do 1º acesso>
 
+# Mercado Livre (reclamações) — v1.2.0
+ML_CLIENT_ID=<App ID do aplicativo do Mercado Livre>
+ML_CLIENT_SECRET=<Secret Key do aplicativo>
+
 TINY_TOKEN=            # veja a observação sobre o Tiny abaixo
 ```
 
@@ -97,3 +101,13 @@ Suba a nova versão no GitHub, espere o Actions publicar, troque a tag da imagem
 3. Volte ao Easypanel e **apague `ADMIN_PASSWORD`**. As contas já estão no banco (volume `/data`), então isso é seguro.
 4. O banco e as fotos continuam no volume `/data`: o backup desse volume agora também guarda usuários e chaves.
 5. Gerente IA: veja `API-GERENTE-IA.md`.
+
+## Mercado Livre (v1.2.0)
+
+1. No painel de desenvolvedores do Mercado Livre, abra o aplicativo que já tem as permissões de **reclamações** e **mensagens** e acrescente, em *URLs de redirecionamento*, **`https://atendimento.mcs.ind.br/api/ml/callback`** (pode ter mais de uma URL; as que já existem continuam).
+2. No Easypanel, acrescente `ML_CLIENT_ID` e `ML_CLIENT_SECRET` (os mesmos valores do aplicativo; guarde só aqui) e implante.
+3. Entre no painel como gerente → **Equipe** → **Mercado Livre** → **Conectar ao Mercado Livre**. Entre com a conta vendedora, autorize, e você volta ao painel com "conectado".
+4. As reclamações abertas aparecem em até 3 minutos (ou use **Sincronizar agora**). Elas ficam na aba Ocorrências com o selo **ML**.
+5. Se a conexão cair (senha trocada, acesso revogado), a aba Equipe mostra o erro: basta **Reconectar**.
+
+Atenção: confirme que o volume `ocorrencias-data` está montado em `/data`. A conexão com o Mercado Livre fica no banco, e sem o volume ela se perde a cada implantação.

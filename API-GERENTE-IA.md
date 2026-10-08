@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.1.0
+# API do Gerente IA — Central de Ocorrências v1.2.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -15,15 +15,20 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 
 | Ação | Rota | Chave IA |
 |---|---|---|
-| Listar / buscar ocorrências | `GET /ocorrencias?q=&canal=&status=&pagina=` | sim |
+| Listar / buscar ocorrências | `GET /ocorrencias?q=&canal=&status=&origem=&pagina=` (`origem=ml` ou `formulario`) | sim |
 | Ler uma ocorrência (relato, dados do Tiny, histórico) | `GET /ocorrencias/{protocolo}` | sim |
 | Mudar status | `PATCH /ocorrencias/{protocolo}/status` `{"status":"em_analise"}` | sim |
 | Anotar (nota interna, o cliente não vê) | `POST /ocorrencias/{protocolo}/notas` `{"texto":"…"}` | sim |
+| **Responder o comprador no Mercado Livre** | `POST /ocorrencias/{protocolo}/ml/mensagem` `{"texto":"…"}` (até 2000 caracteres; 20 por hora) | sim |
 | Responder o cliente (envia e-mail) | `POST /ocorrencias/{protocolo}/resposta` | **não** |
 | Ver fotos | `GET /anexos/{id}` | **não** |
 | Equipe e chaves | `/usuarios`, `/chaves` | **não** |
 
 Tudo que a chave faz fica no histórico com o autor **Gerente IA**.
+
+### Reclamações do Mercado Livre
+
+Ocorrências com `origem: "ml"` vêm da reclamação do Mercado Livre e têm `prazo_em` (limite para responder). O detalhe traz o objeto `ml`: `claim` (tipo, etapa, motivo, ações disponíveis), `mensagens` (quem escreveu, texto, data), `destinatario` (`complainant` = comprador, `mediator` = mediador quando em disputa) e `encerrada`. Para essas ocorrências o e-mail ao cliente não existe; a resposta é `POST …/ml/mensagem`. Reclamação encerrada devolve 409. A chave IA **não** conecta nem desconecta o Mercado Livre.
 
 Valores de `status`: `nova`, `em_analise`, `aguardando_cliente`, `resolvida`.
 Valores de `canal`: `mercado_livre`, `shopee`, `tiktok_shop`, `loja_propria`.

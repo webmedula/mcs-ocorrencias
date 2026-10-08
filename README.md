@@ -1,4 +1,4 @@
-# Central de Ocorrências — v1.0.5
+# Central de Ocorrências — v1.2.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
@@ -95,3 +95,9 @@ Em `/painel`. Perfis: **gerente** (tudo, mais equipe e chaves) e **atendimento**
 3. Para o Gerente IA, gere uma chave em **Equipe → Chaves do Gerente IA** e veja `API-GERENTE-IA.md`.
 
 Uma lista de usuários esquecidos ou de chaves fica sempre visível na aba Equipe; desativar um usuário derruba as sessões dele na hora.
+
+## Mercado Livre (v1.2.0)
+
+Com `ML_CLIENT_ID` e `ML_CLIENT_SECRET` definidos, o gerente conecta a conta vendedora em **Equipe → Mercado Livre**. A Central verifica as reclamações abertas a cada `ML_POLL_MINUTES` (padrão 3), cria uma ocorrência por reclamação (origem `ml`), avisa no Telegram e deixa a equipe e o Gerente IA responderem o comprador dentro da reclamação. Tokens ficam criptografados no banco. Passo a passo em `DEPLOY-EASYPANEL.md`.
+
+Tabelas extras: `ml_conexao`, `ml_estados`, `ml_mensagens`, `ml_envios`.

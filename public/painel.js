@@ -1,10 +1,10 @@
-// Central de Ocorrências v1.1.0 — painel interno
+// Central de Ocorrências v1.2.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
   const PAPEL = { gerente: "Gerente", atendimento: "Atendimento" };
 
-  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "" };
+  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "" };
 
   // ---------- utilidades ----------
   function h(tag, attrs, ...filhos) {
@@ -15,7 +15,7 @@
       else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? "" : v);
     }
-    for (const f of filhos.flat()) if (f != null && f !== false) el.append(f.nodeType ? f : document.createTextNode(String(f)));
+    for (const f of filhos.flat(Infinity)) if (f != null && f !== false) el.append(f.nodeType ? f : document.createTextNode(String(f)));
     return el;
   }
   const fmt = (iso) => (iso ? new Date(iso.replace(" ", "T") + "Z").toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
@@ -50,6 +50,15 @@
     mostrar($("#menu"), true);
     mostrar($("#aba-equipe"), eu.papel === "gerente");
     $("#quem").textContent = `${eu.nome} · ${PAPEL[eu.papel] || ""}`;
+    const qml = new URLSearchParams(location.search).get("ml");
+    if (qml && eu.papel === "gerente") {
+      history.replaceState(null, "", location.pathname + location.hash);
+      abrirAba("equipe");
+      const av = $("#ml-aviso");
+      av.textContent = qml === "ok" ? "Mercado Livre conectado! As reclamações abertas estão sendo importadas." : "Não foi possível conectar ao Mercado Livre. Tente de novo.";
+      mostrar(av, true);
+      return;
+    }
     abrirAba("ocorrencias");
   }
 
@@ -64,7 +73,7 @@
   // ---------- ocorrências ----------
   async function carregarLista() {
     const f = estado.filtro;
-    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, pagina: String(f.pagina) });
+    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, pagina: String(f.pagina) });
     const r = await api("GET", "/ocorrencias?" + q);
     if (!r.ok) return;
     const d = r.json;
@@ -75,7 +84,7 @@
     corpo.replaceChildren();
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
-        h("td", {}, h("strong", {}, o.protocolo), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+        h("td", {}, h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -90,6 +99,16 @@
     $("#p-info").textContent = `${d.total} ocorrência${d.total === 1 ? "" : "s"} · página ${d.pagina} de ${paginas}`;
     $("#p-ant").disabled = d.pagina <= 1;
     $("#p-prox").disabled = d.pagina >= paginas;
+  }
+
+  // Prazo do Mercado Livre: vermelho quando falta menos de 24 h
+  function prazoEl(o) {
+    if (o.origem !== "ml" || !o.prazo_em || o.status === "resolvida") return null;
+    const t = new Date(o.prazo_em.replace(" ", "T") + (o.prazo_em.includes("Z") ? "" : "Z")).getTime();
+    if (Number.isNaN(t)) return null;
+    const falta = t - Date.now();
+    const urgente = falta < 24 * 3600 * 1000;
+    return h("small", { class: "prazo" + (urgente ? " urgente" : "") }, falta < 0 ? "Prazo vencido" : `Responder até ${fmt(o.prazo_em)}`);
   }
 
   function montarFiltros(d) {
@@ -175,9 +194,10 @@
       if (r.ok) { await selecionar(o.protocolo, false); } else { notaMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(notaMsg, true); }
     });
 
+    const ehMl = o.origem === "ml" && o.ml;
     const respTxt = h("textarea", { id: "d-resp", rows: "3", maxlength: "3000" });
     const respMsg = h("p", { class: "msg-ok oculto", role: "status" });
-    if (estado.msgResp) { respMsg.textContent = estado.msgResp; mostrar(respMsg, true); estado.msgResp = ""; }
+    if (estado.msgResp && !ehMl) { respMsg.textContent = estado.msgResp; mostrar(respMsg, true); estado.msgResp = ""; }
     const formResp = h("form", { class: "acao", novalidate: true },
       h("label", { for: "d-resp" }, "Resposta ao cliente ", h("span", { class: "dica" }, "(vai por e-mail e aparece na consulta)")), respTxt, respMsg,
       h("button", { type: "submit", class: "mini" }, "Enviar resposta"));
@@ -197,18 +217,114 @@
     box.append(
       h("div", { class: "cab" }, h("h2", {}, o.protocolo), h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
       h("p", { class: "meta" }, `${m.canais[o.canal] || o.canal} · pedido ${o.pedido} · ${m.tipos[o.tipo] || o.tipo}`),
-      h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
+      ehMl
+        ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
+        : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
+      ...(ehMl ? [blocoMl(o)] : []),
       tiny,
-      h("h3", {}, "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
-      h("h3", {}, `Fotos (${o.anexos.length})`), fotos,
+      h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
+      ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
       h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
-      formNota, formResp,
+      formNota, ehMl ? formMl(o) : formResp,
       h("h3", {}, "Histórico"), hist,
     );
   }
 
+  const ROTULO_REM = { complainant: "Comprador", respondent: "Vendedor", mediator: "Mediador do ML" };
+  const TIPO_CLAIM = { mediations: "Mediação", returns: "Devolução", cancel_purchase: "Cancelamento", fulfillment: "Fulfillment" };
+  const ACAO = { send_message_to_complainant: "Responder o comprador", send_message_to_mediator: "Responder o mediador", refund: "Reembolsar", allow_return: "Autorizar devolução" };
+
+  function blocoMl(o) {
+    const c = o.ml.claim || {};
+    const linhas = [
+      ["Reclamação", c.id], ["Tipo", TIPO_CLAIM[c.type] || c.type], ["Etapa", c.stage === "dispute" ? "Em disputa (mediação do ML)" : c.stage === "claim" ? "Reclamação (você pode resolver)" : c.stage],
+      ["Motivo", c.motivo || c.reason_id], ["Situação", c.status === "closed" ? "Encerrada" : "Aberta"],
+      ["Prazo", o.prazo_em ? fmt(o.prazo_em) : null],
+    ].filter((x) => x[1]);
+    const acoes = (c.acoes || []).map((a) => ACAO[a.action] || a.action);
+    return h("div", { class: "faixa ml-info" },
+      h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
+      acoes.length ? h("p", { class: "aviso" }, "Ações disponíveis no ML: " + acoes.join(", ") + ".") : null);
+  }
+
+  function formMl(o) {
+    const msgs = o.ml.mensagens || [];
+    const conversa = msgs.length
+      ? h("ul", { class: "conversa" }, msgs.map((m) =>
+          h("li", { class: "bolha " + (m.remetente === "respondent" ? "nos" : m.remetente === "complainant" ? "comprador" : "mediador") },
+            h("span", { class: "quem-msg" }, (ROTULO_REM[m.remetente] || m.remetente) + (m.autor ? ` (${m.autor})` : "")),
+            h("p", {}, m.texto + (m.anexos ? ` [${m.anexos} anexo(s) — veja no Mercado Livre]` : "")),
+            h("time", {}, fmt(m.data)))))
+      : h("p", { class: "aviso" }, "Ainda não há mensagens nesta reclamação.");
+    const caixa = h("div", {}, h("h3", {}, "Conversa no Mercado Livre"), conversa);
+    if (o.ml.encerrada) { caixa.append(h("p", { class: "aviso" }, "Reclamação encerrada: não é possível enviar novas mensagens.")); return caixa; }
+    const para = o.ml.destinatario === "mediator" ? "ao mediador do Mercado Livre" : "ao comprador";
+    const txt = h("textarea", { id: "d-ml", rows: "4", maxlength: "2000" });
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    if (estado.msgResp) { msg.textContent = estado.msgResp; mostrar(msg, true); estado.msgResp = ""; }
+    const f = h("form", { class: "acao", novalidate: true },
+      h("label", { for: "d-ml" }, "Mensagem ", h("span", { class: "dica" }, `(vai ${para}, direto no Mercado Livre; até 2000 caracteres)`)), txt, msg,
+      h("button", { type: "submit", class: "mini" }, "Enviar no Mercado Livre"));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (txt.value.trim().length < 2) return;
+      const btn = f.querySelector("button"); btn.disabled = true;
+      const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/ml/mensagem`, { texto: txt.value });
+      btn.disabled = false;
+      if (r.ok) { estado.msgResp = "Mensagem enviada no Mercado Livre."; await selecionar(o.protocolo, false); await carregarLista(); }
+      else { msg.textContent = r.json.erro || "Não foi possível enviar."; mostrar(msg, true); }
+    });
+    caixa.append(f);
+    return caixa;
+  }
+
+  // ---------- Mercado Livre (equipe) ----------
+  async function carregarMl() {
+    const r = await api("GET", "/ml/status");
+    const est = $("#ml-estado"), ac = $("#ml-acoes");
+    est.replaceChildren(); ac.replaceChildren();
+    if (!r.ok) { est.append(h("p", { class: "aviso" }, r.json.erro || "Não foi possível ler o status.")); return; }
+    const s = r.json;
+    if (!s.configurado) {
+      est.append(h("p", { class: "aviso" }, "Falta definir ML_CLIENT_ID e ML_CLIENT_SECRET nas variáveis do Easypanel."));
+      return;
+    }
+    if (!s.conectado) {
+      est.append(h("p", {}, "Não conectado."), h("p", { class: "aviso" }, `Na aplicação do Mercado Livre, a URL de redirecionamento deve incluir: ${s.redirectUri}`));
+    } else {
+      est.append(h("p", {}, h("strong", {}, "Conectado"), ` como ${s.nickname || s.userId}`, ` desde ${fmt(s.conectadoEm)}`),
+        h("p", { class: "aviso" }, `Última verificação: ${s.ultimaSync ? fmt(s.ultimaSync) : "ainda não"} · a cada ${s.intervaloMin} min`));
+      if (s.ultimoErro) est.append(h("p", { class: "erro-geral" }, "Último erro: " + s.ultimoErro));
+    }
+    const conectar = h("button", { type: "button", class: s.conectado ? "sec mini" : "primario" }, s.conectado ? "Reconectar" : "Conectar ao Mercado Livre");
+    conectar.addEventListener("click", async () => {
+      conectar.disabled = true;
+      const c = await api("POST", "/ml/conectar");
+      if (c.ok && c.json.url) window.location.assign(c.json.url);
+      else { conectar.disabled = false; est.append(h("p", { class: "erro-geral" }, c.json.erro || "Não foi possível iniciar a conexão.")); }
+    });
+    ac.append(conectar);
+    if (s.conectado) {
+      const sinc = h("button", { type: "button", class: "sec mini" }, "Sincronizar agora");
+      sinc.addEventListener("click", async () => {
+        sinc.disabled = true; sinc.textContent = "Sincronizando…";
+        const x = await api("POST", "/ml/sincronizar");
+        const av = $("#ml-aviso");
+        av.textContent = x.ok ? `Pronto: ${x.json.novas ?? 0} nova(s), ${x.json.atualizadas ?? 0} atualizada(s), ${x.json.mensagens ?? 0} mensagem(ns).` : (x.json.erro || "Falha ao sincronizar.");
+        mostrar(av, true); carregarMl();
+      });
+      const des = h("button", { type: "button", class: "sec mini" }, "Desconectar");
+      des.addEventListener("click", async () => {
+        if (!window.confirm("Desconectar o Mercado Livre? As reclamações já importadas continuam no painel.")) return;
+        await api("DELETE", "/ml"); carregarMl();
+      });
+      ac.append(sinc, des);
+    }
+  }
+
   // ---------- equipe ----------
   async function carregarEquipe() {
+    carregarMl();
     const [u, k] = await Promise.all([api("GET", "/usuarios"), api("GET", "/chaves")]);
     if (u.ok) {
       const corpo = $("#usuarios");
@@ -270,6 +386,7 @@
     timer = setTimeout(() => { estado.filtro.q = e.target.value.trim(); estado.filtro.pagina = 1; carregarLista(); }, 300);
   });
   $("#f-canal").addEventListener("change", (e) => { estado.filtro.canal = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
+  $("#f-origem").addEventListener("change", (e) => { estado.filtro.origem = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-status").addEventListener("change", (e) => { estado.filtro.status = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });

@@ -9,6 +9,7 @@ import {
   identificar, nomeDoAtor, senhaForte, soGerente, soPessoas,
 } from "./auth.js";
 import { enviarResposta } from "./notify.js";
+import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
 export const admin = express.Router();
@@ -66,6 +67,7 @@ admin.get("/ocorrencias", (req, res) => {
   const q = String(req.query.q ?? "").trim().slice(0, 80);
   const canal = String(req.query.canal ?? "");
   const status = String(req.query.status ?? "");
+  const origem = String(req.query.origem ?? "");
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = 25;
 
@@ -73,6 +75,7 @@ admin.get("/ocorrencias", (req, res) => {
   const args: (string | number)[] = [];
   if (canal in CANAIS) { where.push("canal = ?"); args.push(canal); }
   if (status in STATUS) { where.push("status = ?"); args.push(status); }
+  if (origem === "ml" || origem === "formulario") { where.push("origem = ?"); args.push(origem); }
   if (q) {
     const like = `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`;
     where.push("(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')");
@@ -82,7 +85,7 @@ admin.get("/ocorrencias", (req, res) => {
   const total = (db.prepare(`SELECT COUNT(*) AS n FROM ocorrencias ${cond}`).get(...args) as { n: number }).n;
   const itens = db
     .prepare(
-      `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, criado_em, atualizado_em,
+      `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos
        FROM ocorrencias o ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ? OFFSET ?`,
     )
@@ -102,8 +105,17 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
     .all(o.id);
   let tiny: unknown = null;
   try { tiny = o.tiny_json ? JSON.parse(o.tiny_json) : null; } catch { /* ignora */ }
-  const { ip_hash: _ip, tiny_json: _t, ...resto } = o;
-  res.json({ ...resto, tiny, anexos, eventos });
+  const { ip_hash: _ip, tiny_json: _t, ml_json: mlJson, ...resto } = o;
+  let ml: unknown = null;
+  if (o.origem === "ml") {
+    let claim: any = null;
+    try { claim = mlJson ? JSON.parse(mlJson) : null; } catch { /* ignora */ }
+    const mensagens = db
+      .prepare("SELECT remetente, destinatario, texto, anexos, autor, data FROM ml_mensagens WHERE ocorrencia_id = ? ORDER BY data, id")
+      .all(o.id);
+    ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
+  }
+  res.json({ ...resto, tiny, anexos, eventos, ml });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -139,6 +151,7 @@ admin.post("/ocorrencias/:protocolo/resposta", soPessoas, async (req, res) => {
   if (!p.success) return invalido(res, p.error);
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem === "ml") return res.status(400).json({ erro: "Reclamações do Mercado Livre são respondidas pela mensagem do próprio Mercado Livre." });
   db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,1,?)").run(o.id, p.data.texto, nomeDoAtor(req.ator!));
   db.prepare("UPDATE ocorrencias SET atualizado_em = datetime('now') WHERE id = ?").run(o.id);
   let emailEnviado = false;
@@ -158,6 +171,64 @@ admin.get("/anexos/:id", soPessoas, (req, res) => {
   if (!a) return res.status(404).end();
   res.setHeader("Cache-Control", "private, max-age=300");
   res.type(a.mime).sendFile(path.join(uploadsDir, path.basename(a.arquivo)));
+});
+
+// ---------- Mercado Livre ----------
+// Limite de mensagens enviadas ao ML por hora (protege contra automação em laço)
+const envios = new Map<string, number[]>();
+function dentroDoLimite(chave: string, max: number): boolean {
+  const agora = Date.now();
+  const lista = (envios.get(chave) ?? []).filter((t) => agora - t < 3600_000);
+  if (lista.length >= max) { envios.set(chave, lista); return false; }
+  lista.push(agora);
+  envios.set(chave, lista);
+  return true;
+}
+const erroMl = (res: express.Response, e: unknown) => {
+  if (e instanceof MlErro) return res.status(e.status >= 400 && e.status < 600 && e.status !== 401 ? e.status : 502).json({ erro: e.message });
+  throw e;
+};
+
+// Pessoas e o Gerente IA podem responder o comprador dentro da reclamação do ML
+admin.post("/ocorrencias/:protocolo/ml/mensagem", async (req, res) => {
+  const p = texto.safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml") return res.status(400).json({ erro: "Esta ocorrência não veio do Mercado Livre." });
+  const a = req.ator!;
+  if (!dentroDoLimite(`${a.tipo}:${a.id}`, a.tipo === "ia" ? 20 : 120))
+    return res.status(429).json({ erro: "Muitas mensagens na última hora. Aguarde um pouco." });
+  try {
+    const r = await enviarMensagem(o, p.data.texto, nomeDoAtor(a));
+    db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)").run(
+      o.id, `Mensagem enviada no Mercado Livre (${r.destinatario === "mediator" ? "ao mediador" : "ao comprador"}).`, nomeDoAtor(a),
+    );
+    if (o.status === "nova") db.prepare("UPDATE ocorrencias SET status = 'em_analise' WHERE id = ?").run(o.id);
+    res.status(201).json({ ok: true, destinatario: r.destinatario });
+  } catch (e) {
+    return erroMl(res, e);
+  }
+});
+
+admin.get("/ml/status", soGerente, (_req, res) => res.json(statusConexao()));
+
+admin.post("/ml/conectar", soGerente, (req, res) => {
+  try {
+    res.json({ url: urlAutorizacao((req.ator as { id: number }).id) });
+  } catch (e) {
+    return erroMl(res, e);
+  }
+});
+
+admin.post("/ml/sincronizar", soGerente, async (_req, res) => {
+  const r = await sincronizar();
+  res.json({ ...r, ...statusConexao() });
+});
+
+admin.delete("/ml", soGerente, (_req, res) => {
+  desconectar();
+  res.json({ ok: true });
 });
 
 // ---------- Minha conta ----------

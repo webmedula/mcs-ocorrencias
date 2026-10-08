@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0 — 2026-10-08
+
+Reclamações do Mercado Livre dentro da Central, com resposta ao comprador.
+
+- **Conexão própria** com o Mercado Livre (OAuth), feita pelo gerente na aba Equipe → *Mercado Livre* → *Conectar*. Tokens guardados criptografados (AES-256-GCM); renovação automática.
+- **Importação automática** das reclamações abertas (verifica a cada 3 min, `ML_POLL_MINUTES`). Cada reclamação vira uma ocorrência com o selo **ML**, canal Mercado Livre, pedido, comprador (apelido), motivo, etapa e **prazo para responder** (em vermelho quando falta menos de 24 h). Consulta ao Tiny pelo número do pedido, se ligado.
+- **Aviso no Telegram** para reclamação nova e para nova mensagem do comprador.
+- **Responder o comprador pelo painel**: a conversa aparece como bate-papo e a resposta vai direto para a reclamação no Mercado Livre (ao mediador, se a reclamação estiver em disputa). **Pessoas e o Gerente IA** podem responder; o histórico mostra quem enviou. A IA tem limite de 20 mensagens por hora.
+- Reclamação encerrada no ML vira **Resolvida** sozinha; mensagem nova do comprador reabre como **Em análise**.
+- Filtro por origem (formulário do site × Mercado Livre) na lista.
+- Reclamações do ML **não** aparecem na consulta pública do cliente e não têm resposta por e-mail (o Mercado Livre não informa o e-mail do comprador).
+- Novas variáveis: `ML_CLIENT_ID`, `ML_CLIENT_SECRET` (opcionais: `ML_REDIRECT_URI`, `ML_POLL_MINUTES`).
+
 ## v1.1.0 — 2026-10-05
 
 Painel interno de triagem, com login da equipe e acesso do Gerente IA.

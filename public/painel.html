@@ -51,6 +51,8 @@
             <input type="search" id="f-busca" placeholder="Buscar protocolo, pedido, nome ou e-mail" autocomplete="off">
             <label class="so-leitor" for="f-canal">Canal</label>
             <select id="f-canal"><option value="">Todos os canais</option></select>
+            <label class="so-leitor" for="f-origem">Origem</label>
+            <select id="f-origem"><option value="">Todas as origens</option><option value="formulario">Formulário do site</option><option value="ml">Mercado Livre</option></select>
             <label class="so-leitor" for="f-status">Status</label>
             <select id="f-status"><option value="">Todos os status</option></select>
           </div>
@@ -76,6 +78,13 @@
     <!-- Equipe (gerente) -->
     <section id="v-equipe" class="oculto">
       <h1 class="menor">Equipe</h1>
+      <div id="ml-aviso" class="ok-msg oculto" role="status"></div>
+      <div class="card simples ml-card">
+        <h2>Mercado Livre</h2>
+        <p class="aviso">Traz as reclamações abertas do Mercado Livre para o painel e permite responder o comprador por aqui.</p>
+        <div id="ml-estado" class="ml-estado"></div>
+        <div class="acoes-u" id="ml-acoes"></div>
+      </div>
       <div class="duas">
         <div class="card simples">
           <h2>Usuários</h2>
@@ -93,7 +102,7 @@
         </div>
         <div class="card simples">
           <h2>Chaves do Gerente IA</h2>
-          <p class="aviso">Permitem ao Gerente IA listar e ler ocorrências, mudar status e anotar. Não permitem responder clientes nem ver fotos.</p>
+          <p class="aviso">Permitem ao Gerente IA listar e ler ocorrências, mudar status e anotar. Podem responder compradores do Mercado Livre, mas não e-mails de clientes nem ver fotos.</p>
           <div id="chave-nova" class="chave-nova oculto" role="status">
             <strong>Copie agora: esta chave não será mostrada de novo.</strong>
             <code id="chave-token"></code>

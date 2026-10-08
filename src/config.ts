@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.1.0",
+  version: "1.2.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -44,6 +44,13 @@ export const config = {
   adminName: env.ADMIN_NAME ?? "Gerente",
   // Duração do login no painel, em horas
   sessionHours: Number(env.SESSION_HOURS ?? 12),
+  // Mercado Livre (reclamações). Vazio = integração desligada.
+  mlClientId: (env.ML_CLIENT_ID ?? "").trim(),
+  mlClientSecret: (env.ML_CLIENT_SECRET ?? "").trim(),
+  mlRedirectUri: (env.ML_REDIRECT_URI ?? "").trim() || `${env.PUBLIC_URL ?? "http://localhost:3000"}/api/ml/callback`,
+  mlPollMinutes: Math.max(1, Number(env.ML_POLL_MINUTES ?? 3)),
+  mlAuthBase: env.ML_AUTH_BASE ?? "https://auth.mercadolivre.com.br",
+  mlApiBase: env.ML_API_BASE ?? "https://api.mercadolibre.com",
 };
 
 export const CANAIS = {

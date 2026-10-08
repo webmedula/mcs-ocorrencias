@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { config, CANAIS, TIPOS, type Canal, type Tipo } from "./config.js";
 import type { TinyResultado } from "./tiny.js";
 
-const esc = (s: string) =>
+export const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 export interface OcorrenciaResumo {
@@ -188,4 +188,19 @@ export async function enviarResposta(o: { protocolo: string; nome: string; email
   });
   console.log(`[mail] resposta ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} · resposta="${info.response}"`);
   return info.accepted.length > 0;
+}
+
+/** Aviso genérico no Telegram (HTML). Nunca lança: erros vão para o log. */
+export async function enviarTelegram(texto: string): Promise<void> {
+  if (!config.telegramToken || !config.telegramChatId) return;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${config.telegramToken}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: config.telegramChatId, text: texto, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    if (!res.ok) console.error(`[telegram] HTTP ${res.status}: ${await res.text()}`);
+  } catch (e: any) {
+    console.error("[telegram]", e?.message);
+  }
 }

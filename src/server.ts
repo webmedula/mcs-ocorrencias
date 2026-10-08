@@ -12,6 +12,7 @@ import { db } from "./db.js";
 import { gerarProtocolo, hashIp } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
 import { admin } from "./admin.js";
+import { MlErro, concluirAutorizacao, iniciarSincronizacaoML, sincronizar } from "./ml.js";
 import { garantirPrimeiroGerente, limparSessoesVencidas } from "./auth.js";
 import { avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
 
@@ -109,6 +110,22 @@ const limiteConsulta = rateLimit({
 
 // ---------- Rotas ----------
 app.use("/api/admin", admin);
+
+// Retorno do OAuth do Mercado Livre. A segurança vem do `state` de uso único (o cookie de sessão
+// SameSite=Strict não acompanha o redirecionamento vindo de outro site).
+app.get("/api/ml/callback", async (req, res) => {
+  const code = String(req.query.code ?? "");
+  const state = String(req.query.state ?? "");
+  if (!code || !state) return res.redirect("/painel?ml=erro");
+  try {
+    await concluirAutorizacao(code, state);
+    void sincronizar();
+    res.redirect("/painel?ml=ok");
+  } catch (e: any) {
+    console.error("[ml] falha ao concluir a autorização:", e instanceof MlErro ? e.message : e);
+    res.redirect("/painel?ml=erro");
+  }
+});
 app.get("/api/config", (_req, res) => {
   res.json({
     versao: config.version,
@@ -222,7 +239,7 @@ app.get("/api/consulta", limiteConsulta, (req, res) => {
   if (!protocolo || !email) return naoEncontrado();
 
   const oc = db
-    .prepare("SELECT id, protocolo, canal, tipo, status, criado_em, atualizado_em FROM ocorrencias WHERE protocolo = ? AND email = ?")
+    .prepare("SELECT id, protocolo, canal, tipo, status, criado_em, atualizado_em FROM ocorrencias WHERE protocolo = ? AND email = ? AND origem = 'formulario'")
     .get(protocolo, email) as
     | { id: number; protocolo: string; canal: Canal; tipo: Tipo; status: Status; criado_em: string; atualizado_em: string }
     | undefined;
@@ -269,6 +286,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 garantirPrimeiroGerente();
+iniciarSincronizacaoML();
 limparSessoesVencidas();
 setInterval(limparSessoesVencidas, 60 * 60 * 1000).unref();
 

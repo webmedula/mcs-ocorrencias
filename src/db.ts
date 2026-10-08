@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS eventos (
 );
 `);
 
-// ---------- v1.1.0: painel interno ----------
+// ---------- v1.2.0: painel interno ----------
 db.exec(`
 CREATE TABLE IF NOT EXISTS usuarios (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,4 +83,55 @@ CREATE TABLE IF NOT EXISTS chaves_api (
 // Quem fez cada evento do histórico (nulo = o próprio cliente / sistema)
 const colunasEventos = (db.prepare("PRAGMA table_info(eventos)").all() as { name: string }[]).map((c) => c.name);
 if (!colunasEventos.includes("autor")) db.exec("ALTER TABLE eventos ADD COLUMN autor TEXT");
+
+// ---------- v1.2.0: reclamações do Mercado Livre ----------
+const colunasOc = (db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasOc.includes("origem")) db.exec("ALTER TABLE ocorrencias ADD COLUMN origem TEXT NOT NULL DEFAULT 'formulario'");
+if (!colunasOc.includes("ml_claim_id")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_claim_id TEXT");
+if (!colunasOc.includes("ml_json")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_json TEXT");
+if (!colunasOc.includes("prazo_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN prazo_em TEXT");
+db.exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oc_claim ON ocorrencias(ml_claim_id) WHERE ml_claim_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_oc_origem ON ocorrencias(origem);
+
+CREATE TABLE IF NOT EXISTS ml_conexao (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  user_id TEXT NOT NULL,
+  nickname TEXT,
+  access_enc TEXT NOT NULL,
+  refresh_enc TEXT NOT NULL,
+  expira_em TEXT NOT NULL,
+  scope TEXT,
+  conectado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  ultima_sync TEXT,
+  ultimo_erro TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ml_estados (
+  state TEXT PRIMARY KEY,
+  usuario_id INTEGER NOT NULL,
+  expira_em TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ml_mensagens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ocorrencia_id INTEGER NOT NULL REFERENCES ocorrencias(id) ON DELETE CASCADE,
+  chave TEXT NOT NULL UNIQUE,
+  remetente TEXT NOT NULL,
+  destinatario TEXT,
+  texto TEXT NOT NULL,
+  anexos INTEGER NOT NULL DEFAULT 0,
+  autor TEXT,
+  data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mlmsg_oc ON ml_mensagens(ocorrencia_id);
+
+CREATE TABLE IF NOT EXISTS ml_envios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  claim_id TEXT NOT NULL,
+  texto_hash TEXT NOT NULL,
+  autor TEXT NOT NULL,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
 
