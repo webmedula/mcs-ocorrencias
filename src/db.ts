@@ -133,5 +133,42 @@ CREATE TABLE IF NOT EXISTS ml_envios (
   autor TEXT NOT NULL,
   criado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- v1.3.0
+CREATE TABLE IF NOT EXISTS redefinicoes (
+  token_hash TEXT PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  expira_em TEXT NOT NULL,
+  usado INTEGER NOT NULL DEFAULT 0,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS modelos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  titulo TEXT NOT NULL,
+  texto TEXT NOT NULL,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alertas_prazo (
+  ocorrencia_id INTEGER NOT NULL REFERENCES ocorrencias(id) ON DELETE CASCADE,
+  limiar INTEGER NOT NULL,
+  prazo_em TEXT NOT NULL,
+  enviado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (ocorrencia_id, limiar, prazo_em)
+);
+
+CREATE TABLE IF NOT EXISTS rotinas_estado (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
 `);
 
+// Modelos de resposta iniciais (só na primeira vez)
+if ((db.prepare("SELECT COUNT(*) AS n FROM modelos").get() as { n: number }).n === 0) {
+  const ins = db.prepare("INSERT INTO modelos (titulo, texto) VALUES (?, ?)");
+  ins.run("Recebemos e estamos analisando", "Olá, {nome}! Recebemos a sua ocorrência {protocolo} e já estamos analisando o pedido {pedido}. Retornamos em breve com uma solução.");
+  ins.run("Pedir fotos do produto", "Olá, {nome}! Para avançar com o pedido {pedido}, pode nos enviar fotos do produto e da embalagem, mostrando o problema? Agradecemos a ajuda.");
+  ins.run("Novo envio / troca autorizada", "Olá, {nome}! Vamos resolver: enviaremos um novo produto referente ao pedido {pedido}. Assim que for despachado, enviaremos o rastreio. Obrigado pela paciência.");
+  ins.run("Encerramento", "Olá, {nome}! Consideramos a ocorrência {protocolo} resolvida. Se ainda houver algo pendente, é só responder por aqui. Obrigado!");
+}

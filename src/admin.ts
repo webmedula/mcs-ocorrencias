@@ -8,7 +8,12 @@ import {
   conferirSenha, criarSessao, encerrarSessao, exigirLogin, gastarTempo, gerarChave, hashSenha,
   identificar, nomeDoAtor, senhaForte, soGerente, soPessoas,
 } from "./auth.js";
-import { enviarResposta } from "./notify.js";
+import { enviarRedefinicao, enviarResposta } from "./notify.js";
+import crypto from "node:crypto";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import QRCode from "qrcode";
+import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
 import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
@@ -60,6 +65,51 @@ admin.get("/me", (req, res) => {
 });
 
 // Tudo abaixo exige estar logado (pessoa ou chave do Gerente IA)
+
+// ---------- Recuperação de senha por e-mail (v1.3.0) ----------
+const limiteEsqueci = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: true, legacyHeaders: false,
+  message: { erro: "Muitos pedidos. Aguarde alguns minutos e tente de novo." },
+});
+const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex");
+const RESPOSTA_ESQUECI = { ok: true, mensagem: "Se o e-mail estiver cadastrado, enviamos um link para criar uma nova senha. Ele vale por 1 hora." };
+
+admin.post("/esqueci", limiteEsqueci, async (req, res) => {
+  const p = z.object({ email: z.string().trim().toLowerCase().max(160) }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ erro: "Informe o e-mail." });
+  const u = db.prepare("SELECT id, nome, email FROM usuarios WHERE email = ? AND ativo = 1").get(p.data.email) as
+    | { id: number; nome: string; email: string } | undefined;
+  // Mesma resposta exista a conta ou não (não revela quem tem acesso)
+  if (u && dentroDoLimite(`esqueci:${u.id}`, 3)) {
+    const token = crypto.randomBytes(32).toString("hex");
+    db.prepare("DELETE FROM redefinicoes WHERE usuario_id = ?").run(u.id);
+    db.prepare("INSERT INTO redefinicoes (token_hash, usuario_id, expira_em) VALUES (?,?, datetime('now','+60 minutes'))").run(sha(token), u.id);
+    try { await enviarRedefinicao(u, `${config.publicUrl}/painel#redefinir=${token}`); }
+    catch (e: any) { console.error("[painel] falha ao enviar redefinição:", e?.message); }
+  }
+  res.json(RESPOSTA_ESQUECI);
+});
+
+const limiteRedefinir = rateLimit({
+  windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false,
+  message: { erro: "Muitas tentativas. Aguarde alguns minutos e tente de novo." },
+});
+admin.post("/redefinir", limiteRedefinir, (req, res) => {
+  const p = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/), nova: z.string() }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ erro: "Link inválido." });
+  if (!senhaForte(p.data.nova)) return res.status(400).json({ erro: "A nova senha precisa ter pelo menos 10 caracteres." });
+  const r = db
+    .prepare("SELECT usuario_id FROM redefinicoes WHERE token_hash = ? AND usado = 0 AND expira_em > datetime('now')")
+    .get(sha(p.data.token)) as { usuario_id: number } | undefined;
+  if (!r) return res.status(400).json({ erro: "Este link venceu ou já foi usado. Peça um novo." });
+  db.transaction(() => {
+    db.prepare("UPDATE usuarios SET senha_hash = ? WHERE id = ?").run(hashSenha(p.data.nova), r.usuario_id);
+    db.prepare("DELETE FROM redefinicoes WHERE usuario_id = ?").run(r.usuario_id);
+    db.prepare("DELETE FROM sessoes WHERE usuario_id = ?").run(r.usuario_id);
+  })();
+  res.json({ ok: true });
+});
+
 admin.use(exigirLogin);
 
 // ---------- Ocorrências ----------
@@ -326,6 +376,104 @@ admin.delete("/chaves/:id", soGerente, (req, res) => {
 });
 
 // Erros desta área sempre em JSON
+
+// ---------- Modelos de resposta (v1.3.0) ----------
+const modeloSchema = z.object({ titulo: z.string().trim().min(2).max(80), texto: z.string().trim().min(2).max(2000) });
+
+function preencher(texto: string, o?: { nome?: string; protocolo?: string; pedido?: string }): string {
+  if (!o) return texto;
+  return texto.replace(/\{nome\}/g, o.nome ?? "").replace(/\{protocolo\}/g, o.protocolo ?? "").replace(/\{pedido\}/g, o.pedido ?? "");
+}
+
+// Pessoas e Gerente IA leem. Com ?protocolo=, já vem com {nome}, {protocolo} e {pedido} preenchidos.
+admin.get("/modelos", (req, res) => {
+  const o = req.query.protocolo ? oc(String(req.query.protocolo)) : undefined;
+  const itens = db.prepare("SELECT id, titulo, texto FROM modelos ORDER BY id").all() as { id: number; titulo: string; texto: string }[];
+  res.json(itens.map((m) => ({ ...m, texto_pronto: preencher(m.texto, o) })));
+});
+admin.post("/modelos", soGerente, (req, res) => {
+  const p = modeloSchema.safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const r = db.prepare("INSERT INTO modelos (titulo, texto) VALUES (?,?)").run(p.data.titulo, p.data.texto);
+  res.status(201).json({ id: r.lastInsertRowid });
+});
+admin.patch("/modelos/:id", soGerente, (req, res) => {
+  const id = campoId.safeParse(req.params.id);
+  const p = modeloSchema.safeParse(req.body);
+  if (!id.success || !p.success) return res.status(400).json({ erro: "Dados inválidos." });
+  const r = db.prepare("UPDATE modelos SET titulo = ?, texto = ? WHERE id = ?").run(p.data.titulo, p.data.texto, id.data);
+  if (!r.changes) return res.status(404).json({ erro: "Modelo não encontrado." });
+  res.json({ ok: true });
+});
+admin.delete("/modelos/:id", soGerente, (req, res) => {
+  const id = campoId.safeParse(req.params.id);
+  if (!id.success) return res.status(400).json({ erro: "Dados inválidos." });
+  db.prepare("DELETE FROM modelos WHERE id = ?").run(id.data);
+  res.json({ ok: true });
+});
+
+// ---------- Números (v1.3.0) ----------
+admin.get("/estatisticas", (req, res) => {
+  const dias = [7, 30, 90, 365].includes(Number(req.query.dias)) ? Number(req.query.dias) : 30;
+  const desde = `-${dias} days`;
+  const rows = (sql: string, ...a: unknown[]) => db.prepare(sql).all(...a) as any[];
+  const um = (sql: string, ...a: unknown[]) => db.prepare(sql).get(...a) as any;
+  const total = um("SELECT COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?)", desde).n;
+  const primeira = um(
+    `SELECT AVG((julianday(p.t) - julianday(o.criado_em)) * 24) h, COUNT(*) n FROM ocorrencias o
+     JOIN (SELECT ocorrencia_id, MIN(criado_em) t FROM eventos WHERE autor IS NOT NULL GROUP BY ocorrencia_id) p ON p.ocorrencia_id = o.id
+     WHERE o.criado_em >= datetime('now', ?)`, desde);
+  const resolucao = um(
+    `SELECT AVG((julianday(atualizado_em) - julianday(criado_em)) * 24) h, COUNT(*) n FROM ocorrencias
+     WHERE status = 'resolvida' AND criado_em >= datetime('now', ?)`, desde);
+  const arred = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
+  res.json({
+    dias, total,
+    abertas: um("SELECT COUNT(*) n FROM ocorrencias WHERE status != 'resolvida'").n,
+    resolvidas: um("SELECT COUNT(*) n FROM ocorrencias WHERE status = 'resolvida' AND criado_em >= datetime('now', ?)", desde).n,
+    horasPrimeiraResposta: arred(primeira.h), horasResolucao: arred(resolucao.h),
+    porStatus: rows("SELECT status k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY status", desde),
+    porCanal: rows("SELECT canal k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY canal ORDER BY n DESC", desde),
+    porTipo: rows("SELECT tipo k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY tipo ORDER BY n DESC", desde),
+    porOrigem: rows("SELECT origem k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY origem", desde),
+    porSemana: rows("SELECT strftime('%Y-%m-%d', criado_em, 'weekday 1', '-7 days') k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now','-56 days') GROUP BY k ORDER BY k"),
+    canais: CANAIS, tipos: TIPOS,
+  });
+});
+
+// ---------- QR code por canal (v1.3.0) ----------
+admin.get("/qr", async (req, res) => {
+  const canal = String(req.query.canal ?? "");
+  if (canal && !(canal in CANAIS)) return res.status(400).json({ erro: "Canal inválido." });
+  const url = canal ? `${config.publicUrl}/?canal=${canal}` : `${config.publicUrl}/`;
+  const png = req.query.formato === "png";
+  const opcoes = { margin: 2, errorCorrectionLevel: "M" as const };
+  res.setHeader("Content-Disposition", `inline; filename="qr-${canal || "geral"}.${png ? "png" : "svg"}"`);
+  if (png) { res.type("png").send(await QRCode.toBuffer(url, { ...opcoes, width: 800 })); return; }
+  res.type("image/svg+xml").send(await QRCode.toString(url, { ...opcoes, type: "svg" }));
+});
+
+// ---------- Backup (só gerente) ----------
+admin.get("/backups", soGerente, (_req, res) => res.json(listarBackups()));
+admin.post("/backups", soGerente, async (_req, res) => {
+  try { res.status(201).json({ nome: await fazerBackup() }); }
+  catch (e: any) { res.status(500).json({ erro: "Não foi possível criar o backup: " + (e?.message ?? "erro") }); }
+});
+admin.get("/backups/fotos.tar.gz", soGerente, (_req, res) => {
+  res.setHeader("Content-Type", "application/gzip");
+  res.setHeader("Content-Disposition", 'attachment; filename="fotos-ocorrencias.tar.gz"');
+  const tar = spawn("tar", ["-czf", "-", "-C", config.dataDir, "uploads"]);
+  tar.stdout.pipe(res);
+  tar.on("error", () => res.destroy());
+  res.on("close", () => tar.kill());
+});
+admin.get("/backups/:nome", soGerente, (req, res) => {
+  const nome = req.params.nome;
+  if (!/^ocorrencias-\d{4}-\d{2}-\d{2}\.db$/.test(nome) || !fs.existsSync(path.join(pastaBackups, nome)))
+    return res.status(404).json({ erro: "Backup não encontrado." });
+  res.download(path.join(pastaBackups, nome), nome);
+});
+
 admin.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[admin]", err);
   res.status(500).json({ erro: "Erro interno." });

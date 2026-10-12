@@ -1,4 +1,4 @@
-# Deploy no Easypanel — Central de Ocorrências v1.2.0
+# Deploy no Easypanel — Central de Ocorrências v1.3.0
 
 Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.mcs.ind.br**
 (o DNS `*.mcs.ind.br` já aponta para o VPS, então não é preciso criar registro).
@@ -111,3 +111,12 @@ Suba a nova versão no GitHub, espere o Actions publicar, troque a tag da imagem
 5. Se a conexão cair (senha trocada, acesso revogado), a aba Equipe mostra o erro: basta **Reconectar**.
 
 Atenção: confirme que o volume `ocorrencias-data` está montado em `/data`. A conexão com o Mercado Livre fica no banco, e sem o volume ela se perde a cada implantação.
+
+## Novidades da v1.3.0
+
+Não há passo obrigatório: é só subir a versão e implantar. O que muda para você:
+
+1. **Esqueci minha senha** usa o mesmo e-mail (Resend) das confirmações. Nada para configurar.
+2. **Telegram**: o resumo diário sai às 8 h (horário de Brasília) e o alerta de prazo do Mercado Livre sai sozinho. Para mudar a hora, defina `RESUMO_HORA` (ou `-1` para desligar).
+3. **Backup**: o banco é copiado todo dia para `/data/backups` (volume `ocorrencias-data`). Isso protege de erro, não de perder o volume. De vez em quando, baixe o banco e as fotos em **Equipe → Backup** e guarde fora do servidor.
+4. **QR codes**: em **Equipe**, baixe o QR de cada canal (PNG para imprimir, SVG para design) e coloque nos encartes.

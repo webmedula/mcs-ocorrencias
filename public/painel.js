@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.2.0 — painel interno
+// Central de Ocorrências v1.3.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -38,7 +38,7 @@
   function mostrarLogin() {
     estado.eu = null;
     mostrar($("#menu"), false);
-    for (const v of ["ocorrencias", "equipe", "conta"]) mostrar($("#v-" + v), false);
+    for (const v of ["ocorrencias", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), false);
     mostrar($("#v-login"), true);
     $("#l-senha").value = "";
     $("#l-email").focus();
@@ -46,7 +46,7 @@
 
   function entrar(eu) {
     estado.eu = eu;
-    mostrar($("#v-login"), false);
+    for (const v of ["login", "esqueci", "redefinir"]) mostrar($("#v-" + v), false);
     mostrar($("#menu"), true);
     mostrar($("#aba-equipe"), eu.papel === "gerente");
     $("#quem").textContent = `${eu.nome} · ${PAPEL[eu.papel] || ""}`;
@@ -65,9 +65,10 @@
   function abrirAba(nome) {
     estado.aba = nome;
     for (const b of document.querySelectorAll(".aba")) b.classList.toggle("ativa", b.dataset.aba === nome);
-    for (const v of ["ocorrencias", "equipe", "conta"]) mostrar($("#v-" + v), v === nome);
+    for (const v of ["ocorrencias", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), v === nome);
     if (nome === "ocorrencias") { carregarLista().then(() => abrirDoHash()); }
     if (nome === "equipe") carregarEquipe();
+    if (nome === "numeros") carregarNumeros();
   }
 
   // ---------- ocorrências ----------
@@ -149,6 +150,22 @@
     if (rolar && window.matchMedia("(max-width: 1100px)").matches) { box.scrollIntoView({ behavior: "smooth", block: "start" }); box.focus({ preventScroll: true }); }
   }
 
+  // Seletor de modelos de resposta: preenche o campo com o texto já personalizado
+  function seletorModelo(o, campo) {
+    const sel = h("select", { "aria-label": "Inserir modelo de resposta", class: "modelo-sel oculto" }, h("option", { value: "" }, "Inserir modelo de resposta…"));
+    api("GET", "/modelos?protocolo=" + encodeURIComponent(o.protocolo)).then((r) => {
+      if (!r.ok || !r.json.length) return;
+      for (const m of r.json) sel.append(h("option", { value: m.id }, m.titulo));
+      sel.addEventListener("change", () => {
+        const m = r.json.find((x) => String(x.id) === sel.value);
+        if (m) { campo.value = m.texto_pronto; campo.focus(); }
+        sel.value = "";
+      });
+      mostrar(sel, true);
+    });
+    return sel;
+  }
+
   function renderDetalhe(box, o) {
     const m = estado.meta;
     const tiny = o.tiny_status === "encontrado" && o.tiny
@@ -199,7 +216,7 @@
     const respMsg = h("p", { class: "msg-ok oculto", role: "status" });
     if (estado.msgResp && !ehMl) { respMsg.textContent = estado.msgResp; mostrar(respMsg, true); estado.msgResp = ""; }
     const formResp = h("form", { class: "acao", novalidate: true },
-      h("label", { for: "d-resp" }, "Resposta ao cliente ", h("span", { class: "dica" }, "(vai por e-mail e aparece na consulta)")), respTxt, respMsg,
+      h("label", { for: "d-resp" }, "Resposta ao cliente ", h("span", { class: "dica" }, "(vai por e-mail e aparece na consulta)")), ehMl ? null : seletorModelo(o, respTxt), respTxt, respMsg,
       h("button", { type: "submit", class: "mini" }, "Enviar resposta"));
     formResp.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -263,7 +280,7 @@
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
     if (estado.msgResp) { msg.textContent = estado.msgResp; mostrar(msg, true); estado.msgResp = ""; }
     const f = h("form", { class: "acao", novalidate: true },
-      h("label", { for: "d-ml" }, "Mensagem ", h("span", { class: "dica" }, `(vai ${para}, direto no Mercado Livre; até 2000 caracteres)`)), txt, msg,
+      h("label", { for: "d-ml" }, "Mensagem ", h("span", { class: "dica" }, `(vai ${para}, direto no Mercado Livre; até 2000 caracteres)`)), seletorModelo(o, txt), txt, msg,
       h("button", { type: "submit", class: "mini" }, "Enviar no Mercado Livre"));
     f.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -322,9 +339,114 @@
     }
   }
 
+
+  // ---------- números ----------
+  const NS = "http://www.w3.org/2000/svg";
+  function sv(tag, attrs, texto) {
+    const el = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    if (texto != null) el.textContent = texto;
+    return el;
+  }
+  // Barras horizontais (sem estilos inline: tudo por atributos SVG)
+  function barras(alvo, itens) {
+    alvo.replaceChildren();
+    if (!itens.length) { alvo.append(h("p", { class: "aviso" }, "Sem dados no período.")); return; }
+    const max = Math.max(...itens.map((i) => i.n), 1), linha = 30, larg = 360, rot = 130;
+    const svg = sv("svg", { viewBox: `0 0 ${larg} ${itens.length * linha}`, class: "grafico", role: "img", "aria-label": itens.map((i) => `${i.rotulo}: ${i.n}`).join("; ") });
+    itens.forEach((i, idx) => {
+      const y = idx * linha, w = Math.max(2, ((larg - rot - 44) * i.n) / max);
+      svg.append(sv("text", { x: 0, y: y + 19, class: "g-rot" }, i.rotulo.length > 20 ? i.rotulo.slice(0, 19) + "…" : i.rotulo));
+      svg.append(sv("rect", { x: rot, y: y + 6, width: w, height: 16, rx: 4, class: "g-barra" }));
+      svg.append(sv("text", { x: rot + w + 6, y: y + 19, class: "g-val" }, i.n));
+    });
+    alvo.append(svg);
+  }
+  function colunas(alvo, itens) {
+    alvo.replaceChildren();
+    if (!itens.length) { alvo.append(h("p", { class: "aviso" }, "Sem dados nas últimas 8 semanas.")); return; }
+    const max = Math.max(...itens.map((i) => i.n), 1), l = 64, alt = 150;
+    const svg = sv("svg", { viewBox: `0 0 ${itens.length * l} ${alt + 40}`, class: "grafico", role: "img", "aria-label": itens.map((i) => `${i.rotulo}: ${i.n}`).join("; ") });
+    itens.forEach((i, idx) => {
+      const hh = Math.max(2, ((alt - 20) * i.n) / max), x = idx * l + 12;
+      svg.append(sv("rect", { x, y: alt - hh, width: l - 24, height: hh, rx: 4, class: "g-barra" }));
+      svg.append(sv("text", { x: x + (l - 24) / 2, y: alt - hh - 5, class: "g-val", "text-anchor": "middle" }, i.n));
+      svg.append(sv("text", { x: x + (l - 24) / 2, y: alt + 18, class: "g-rot", "text-anchor": "middle" }, i.rotulo));
+    });
+    alvo.append(svg);
+  }
+  const horas = (x) => (x == null ? "—" : x < 48 ? `${x.toLocaleString("pt-BR")} h` : `${(x / 24).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias`);
+
+  async function carregarNumeros() {
+    const r = await api("GET", "/estatisticas?dias=" + encodeURIComponent($("#n-dias").value));
+    if (!r.ok) return;
+    const d = r.json, box = $("#n-kpis");
+    box.replaceChildren();
+    for (const [rot, val, cls] of [["Em aberto agora", d.abertas, "nova"], ["Recebidas no período", d.total, "em_analise"], ["Resolvidas", d.resolvidas, "resolvida"],
+      ["Tempo até a 1ª resposta", horas(d.horasPrimeiraResposta), "aguardando_cliente"]])
+      box.append(h("div", { class: "kpi " + cls }, rot, h("b", {}, String(val))));
+    // Sempre as últimas 8 semanas (segunda-feira de cada uma), mesmo as vazias
+    const hoje = new Date(); hoje.setUTCHours(0, 0, 0, 0);
+    const seg = new Date(hoje.getTime() - ((hoje.getUTCDay() + 6) % 7) * 86400000);
+    const semanas = [];
+    for (let i = 7; i >= 0; i--) {
+      const dt = new Date(seg.getTime() - i * 7 * 86400000), k = dt.toISOString().slice(0, 10);
+      semanas.push({ rotulo: k.slice(8, 10) + "/" + k.slice(5, 7), n: d.porSemana.find((x) => x.k === k)?.n ?? 0 });
+    }
+    colunas($("#g-semana"), semanas);
+    barras($("#g-canal"), d.porCanal.map((x) => ({ rotulo: d.canais[x.k] || x.k, n: x.n })));
+    barras($("#g-tipo"), d.porTipo.map((x) => ({ rotulo: d.tipos[x.k] || x.k, n: x.n })));
+    barras($("#g-origem"), d.porOrigem.map((x) => ({ rotulo: x.k === "ml" ? "Mercado Livre (reclamações)" : "Formulário do site", n: x.n })));
+  }
+
+  // ---------- modelos, QR e backup (equipe) ----------
+  async function carregarModelos() {
+    const r = await api("GET", "/modelos");
+    const ul = $("#modelos");
+    ul.replaceChildren();
+    if (!r.ok) return;
+    for (const m of r.json) {
+      const ed = h("button", { type: "button", class: "sec mini" }, "Editar");
+      ed.addEventListener("click", () => {
+        $("#m-id").value = m.id; $("#m-titulo").value = m.titulo; $("#m-texto").value = m.texto;
+        $("#m-salvar").textContent = "Salvar alterações"; mostrar($("#m-cancelar"), true); $("#m-titulo").focus();
+      });
+      const ex = h("button", { type: "button", class: "sec mini" }, "Excluir");
+      ex.addEventListener("click", async () => { if (window.confirm(`Excluir o modelo "${m.titulo}"?`)) { await api("DELETE", "/modelos/" + m.id); carregarModelos(); } });
+      ul.append(h("li", {}, h("span", {}, h("strong", {}, m.titulo), h("small", {}, m.texto.length > 110 ? m.texto.slice(0, 110) + "…" : m.texto)), h("span", { class: "acoes-u" }, ed, ex)));
+    }
+  }
+  function limparFormModelo() { $("#f-modelo").reset(); $("#m-id").value = ""; $("#m-salvar").textContent = "Adicionar modelo"; mostrar($("#m-cancelar"), false); }
+
+  function carregarQrs() {
+    const alvo = $("#qrs");
+    if (alvo.childElementCount) return;
+    const canais = estado.meta?.canais || { mercado_livre: "Mercado Livre", shopee: "Shopee", tiktok_shop: "TikTok Shop", loja_propria: "Loja própria" };
+    for (const [k, nome] of [["", "Geral (todos os canais)"], ...Object.entries(canais)]) {
+      const q = k ? `canal=${k}&` : "";
+      alvo.append(h("figure", { class: "qr" },
+        h("img", { src: `/api/admin/qr?${q}formato=svg`, alt: `QR code: ${nome}`, width: "132", height: "132", loading: "lazy" }),
+        h("figcaption", {}, nome, h("br"),
+          h("a", { href: `/api/admin/qr?${q}formato=png`, download: `qr-${k || "geral"}.png` }, "PNG"), " · ",
+          h("a", { href: `/api/admin/qr?${q}formato=svg`, download: `qr-${k || "geral"}.svg` }, "SVG"))));
+    }
+  }
+
+  const tamanho = (b) => (b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB");
+  async function carregarBackups() {
+    const r = await api("GET", "/backups");
+    const ul = $("#backups");
+    ul.replaceChildren();
+    if (!r.ok) return;
+    if (!r.json.length) ul.append(h("li", {}, h("span", { class: "aviso" }, "Nenhum backup ainda: o primeiro sai em até 30 s depois de iniciar, ou use o botão abaixo.")));
+    for (const b of r.json.slice(0, 7))
+      ul.append(h("li", {}, h("span", {}, h("strong", {}, b.nome), h("small", {}, `${tamanho(b.bytes)} · ${fmt(b.criado.replace("T", " ").slice(0, 19))}`)),
+        h("a", { class: "botao-link", href: "/api/admin/backups/" + encodeURIComponent(b.nome) }, "Baixar")));
+  }
+
   // ---------- equipe ----------
   async function carregarEquipe() {
-    carregarMl();
+    carregarMl(); carregarModelos(); carregarQrs(); carregarBackups();
     const [u, k] = await Promise.all([api("GET", "/usuarios"), api("GET", "/chaves")]);
     if (u.ok) {
       const corpo = $("#usuarios");
@@ -372,7 +494,7 @@
   // ---------- eventos ----------
   $("#f-login").addEventListener("submit", async (e) => {
     e.preventDefault();
-    erroEm($("#login-erro"), "");
+    erroEm($("#login-erro"), ""); mostrar($("#login-ok"), false);
     const r = await api("POST", "/login", { email: $("#l-email").value, senha: $("#l-senha").value });
     if (!r.ok) { erroEm($("#login-erro"), r.json.erro || "Não foi possível entrar."); return; }
     entrar({ tipo: "usuario", ...r.json });
@@ -418,6 +540,44 @@
     if (!r.ok) { erroEm($("#senha-erro"), r.json.erro || "Não foi possível trocar."); return; }
     e.target.reset(); mostrar($("#senha-ok"), true);
   });
+
+  $("#n-dias").addEventListener("change", carregarNumeros);
+  $("#f-modelo").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    erroEm($("#modelo-erro"), "");
+    const id = $("#m-id").value, corpo = { titulo: $("#m-titulo").value, texto: $("#m-texto").value };
+    const r = id ? await api("PATCH", "/modelos/" + id, corpo) : await api("POST", "/modelos", corpo);
+    if (!r.ok) { erroEm($("#modelo-erro"), r.json.erro || "Não foi possível salvar."); return; }
+    limparFormModelo(); carregarModelos();
+  });
+  $("#m-cancelar").addEventListener("click", limparFormModelo);
+  $("#b-agora").addEventListener("click", async () => {
+    const r = await api("POST", "/backups"), m = $("#backup-msg");
+    m.textContent = r.ok ? "Backup criado." : (r.json.erro || "Falha ao criar o backup."); mostrar(m, true); carregarBackups();
+  });
+
+  // Recuperação de senha
+  $("#ir-esqueci").addEventListener("click", () => { mostrar($("#v-login"), false); mostrar($("#v-esqueci"), true); $("#e-email").value = $("#l-email").value; $("#e-email").focus(); });
+  $("#voltar-login").addEventListener("click", () => { mostrar($("#v-esqueci"), false); mostrar($("#v-login"), true); });
+  $("#f-esqueci").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    erroEm($("#esqueci-erro"), ""); mostrar($("#esqueci-ok"), false);
+    const r = await api("POST", "/esqueci", { email: $("#e-email").value });
+    if (!r.ok) { erroEm($("#esqueci-erro"), r.json.erro || "Não foi possível enviar."); return; }
+    $("#esqueci-ok").textContent = r.json.mensagem; mostrar($("#esqueci-ok"), true);
+  });
+  $("#f-redefinir").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    erroEm($("#redef-erro"), "");
+    const token = new URLSearchParams(location.hash.slice(1)).get("redefinir") || "";
+    const r = await api("POST", "/redefinir", { token, nova: $("#r-nova").value });
+    if (!r.ok) { erroEm($("#redef-erro"), r.json.erro || "Não foi possível salvar."); return; }
+    history.replaceState(null, "", location.pathname);
+    $("#r-nova").value = "";
+    mostrarLogin();
+    erroEm($("#login-erro"), "");
+    $("#login-ok").textContent = "Senha alterada. Entre com a nova senha."; mostrar($("#login-ok"), true);
+  });
   window.addEventListener("hashchange", () => { if (estado.eu && estado.aba === "ocorrencias") abrirDoHash(); });
   setInterval(() => { if (estado.eu && estado.aba === "ocorrencias" && document.visibilityState === "visible") carregarLista(); }, 60000);
 
@@ -427,6 +587,10 @@
       const cfg = await (await fetch("/api/config")).json();
       $("#rodape").textContent = cfg.marca + " · painel v" + cfg.versao;
     } catch {}
+    if (new URLSearchParams(location.hash.slice(1)).get("redefinir")) {
+      mostrarLogin(); mostrar($("#v-login"), false); mostrar($("#v-redefinir"), true); $("#r-nova").focus();
+      return;
+    }
     const r = await api("GET", "/me");
     if (r.ok && r.json.tipo === "usuario") entrar(r.json); else mostrarLogin();
   })();

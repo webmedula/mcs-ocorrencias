@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.2.0",
+  version: "1.3.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -37,6 +37,10 @@ export const config = {
       ? `${env.BRAND_NAME ?? "Central de Ocorrências"} <${env.SMTP_USER}>`
       : "Central de Ocorrências <no-reply@example.com>"),
   mailFromDefinido: Boolean(env.MAIL_FROM?.trim()),
+  // Rotinas (v1.3.0): fuso, hora do resumo diário (0-23; vazio/-1 = desligado), cópias de backup guardadas
+  timezone: env.TZ_LOCAL ?? "America/Sao_Paulo",
+  resumoHora: env.RESUMO_HORA === undefined || env.RESUMO_HORA === "" ? 8 : Number(env.RESUMO_HORA),
+  backupManter: Math.max(1, Number(env.BACKUP_MANTER ?? 14)),
   publicUrl: env.PUBLIC_URL ?? "http://localhost:3000",
   // Painel interno: o primeiro gerente é criado a partir destas variáveis (só se ainda não houver usuários).
   adminEmail: (env.ADMIN_EMAIL ?? "").trim().toLowerCase(),

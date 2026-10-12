@@ -13,6 +13,7 @@ import { gerarProtocolo, hashIp } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
 import { admin } from "./admin.js";
 import { MlErro, concluirAutorizacao, iniciarSincronizacaoML, sincronizar } from "./ml.js";
+import { iniciarRotinas } from "./rotinas.js";
 import { garantirPrimeiroGerente, limparSessoesVencidas } from "./auth.js";
 import { avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
 
@@ -287,6 +288,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 garantirPrimeiroGerente();
 iniciarSincronizacaoML();
+iniciarRotinas();
 limparSessoesVencidas();
 setInterval(limparSessoesVencidas, 60 * 60 * 1000).unref();
 

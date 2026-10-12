@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.3.0 — 2026-10-12
+
+Recuperação de senha, modelos de resposta, alertas, números, backup e QR codes.
+
+- **Esqueci minha senha**: link na tela de login. A Central envia por e-mail (Resend) um link que vale 1 hora e só funciona uma vez; ao trocar a senha, todos os logins antigos daquela conta caem. A resposta é a mesma exista o e-mail ou não (não revela quem tem acesso). Limites: 5 pedidos por IP e 3 e-mails por conta a cada hora.
+- **Modelos de resposta**: textos prontos com `{nome}`, `{protocolo}` e `{pedido}` preenchidos sozinhos. Aparecem num seletor acima do campo de resposta (e-mail e Mercado Livre). O gerente cria, edita e exclui em Equipe; o Gerente IA lê pela API (`GET /modelos?protocolo=`). Vêm 4 modelos iniciais.
+- **Alerta de prazo no Telegram**: reclamação do Mercado Livre sem resolução avisa quando faltam ~24 h e de novo quando faltam ~6 h.
+- **Resumo diário no Telegram** (8 h, horário de Brasília; `RESUMO_HORA`): abertas por status, chegadas nas últimas 24 h, prazos vencendo/vencidos e paradas há mais de 2 dias. Não envia se não houver nada em aberto.
+- **Aba Números**: em aberto, recebidas, resolvidas, tempo até a 1ª resposta, gráfico por semana, por canal, por assunto e por origem (7, 30, 90 dias ou 1 ano).
+- **Backup automático**: cópia diária do banco em `/data/backups` (guarda as últimas 14; `BACKUP_MANTER`). Em Equipe o gerente baixa o banco e, à parte, todas as fotos (.tar.gz), ou cria um backup na hora.
+- **QR code por canal** em Equipe (PNG e SVG): Geral, Mercado Livre, Shopee, TikTok Shop e Loja própria.
+- Nova dependência: `qrcode`. Novas variáveis (opcionais): `RESUMO_HORA`, `BACKUP_MANTER`, `TZ_LOCAL`.
+
 ## v1.2.0 — 2026-10-08
 
 Reclamações do Mercado Livre dentro da Central, com resposta ao comprador.

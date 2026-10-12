@@ -19,6 +19,7 @@
       <nav id="menu" class="menu oculto" aria-label="Painel">
         <button type="button" class="aba ativa" data-aba="ocorrencias">Ocorrências</button>
         <button type="button" class="aba oculto" data-aba="equipe" id="aba-equipe">Equipe</button>
+        <button type="button" class="aba" data-aba="numeros">Números</button>
         <button type="button" class="aba" data-aba="conta">Minha conta</button>
         <span id="quem" class="quem"></span>
         <button type="button" class="sair" id="sair">Sair</button>
@@ -33,11 +34,38 @@
         <h1 class="menor">Entrar no painel</h1>
         <p class="sub">Acesso restrito à equipe da MCS.</p>
         <div id="login-erro" class="erro-geral oculto" role="alert"></div>
+        <p id="login-ok" class="ok-msg oculto" role="status"></p>
         <label for="l-email">E-mail</label>
         <input type="email" id="l-email" autocomplete="username" required>
         <label for="l-senha">Senha</label>
         <input type="password" id="l-senha" autocomplete="current-password" required>
         <button type="submit" class="primario">Entrar</button>
+        <p class="link-p"><button type="button" class="link" id="ir-esqueci">Esqueci minha senha</button></p>
+      </form>
+    </section>
+
+    <!-- Esqueci a senha -->
+    <section id="v-esqueci" class="oculto">
+      <form id="f-esqueci" class="card simples login" novalidate>
+        <h1 class="menor">Recuperar senha</h1>
+        <p class="sub">Informe o e-mail do seu acesso. Enviaremos um link para criar uma nova senha.</p>
+        <div id="esqueci-erro" class="erro-geral oculto" role="alert"></div>
+        <p id="esqueci-ok" class="ok-msg oculto" role="status"></p>
+        <label for="e-email">E-mail</label>
+        <input type="email" id="e-email" autocomplete="username" required>
+        <button type="submit" class="primario">Enviar link</button>
+        <p class="link-p"><button type="button" class="link" id="voltar-login">Voltar para o login</button></p>
+      </form>
+    </section>
+
+    <!-- Nova senha (link do e-mail) -->
+    <section id="v-redefinir" class="oculto">
+      <form id="f-redefinir" class="card simples login" novalidate>
+        <h1 class="menor">Criar nova senha</h1>
+        <div id="redef-erro" class="erro-geral oculto" role="alert"></div>
+        <label for="r-nova">Nova senha <span class="dica">(mínimo 10 caracteres)</span></label>
+        <input type="password" id="r-nova" autocomplete="new-password" required>
+        <button type="submit" class="primario">Salvar nova senha</button>
       </form>
     </section>
 
@@ -115,6 +143,47 @@
             <button type="submit" class="primario">Gerar chave</button>
           </form>
         </div>
+      </div>
+      <div class="duas ext-equipe">
+        <div class="card simples">
+          <h2>Modelos de resposta</h2>
+          <p class="aviso">Textos prontos para a equipe e o Gerente IA. Use <code>{nome}</code>, <code>{protocolo}</code> e <code>{pedido}</code>: são preenchidos sozinhos.</p>
+          <ul id="modelos" class="chaves"></ul>
+          <form id="f-modelo" novalidate>
+            <div id="modelo-erro" class="erro-geral oculto" role="alert"></div>
+            <input type="hidden" id="m-id">
+            <label for="m-titulo">Título</label><input type="text" id="m-titulo" maxlength="80" required>
+            <label for="m-texto">Texto</label><textarea id="m-texto" rows="4" maxlength="2000" required></textarea>
+            <button type="submit" class="primario" id="m-salvar">Adicionar modelo</button>
+            <button type="button" class="sec mini oculto" id="m-cancelar">Cancelar edição</button>
+          </form>
+        </div>
+        <div class="card simples">
+          <h2>QR codes por canal</h2>
+          <p class="aviso">Para imprimir nos encartes. Cada QR abre o formulário já com o canal escolhido.</p>
+          <div id="qrs" class="qrs"></div>
+          <h2 class="espaco">Backup</h2>
+          <p class="aviso">Uma cópia do banco é feita todo dia (guardamos as últimas) no próprio volume. Para ficar seguro de verdade, baixe de vez em quando e guarde fora do servidor.</p>
+          <p id="backup-msg" class="msg-ok oculto" role="status"></p>
+          <ul id="backups" class="chaves"></ul>
+          <div class="acoes-u"><button type="button" class="sec mini" id="b-agora">Fazer backup agora</button><a class="botao-link" href="/api/admin/backups/fotos.tar.gz">Baixar todas as fotos (.tar.gz)</a></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Números -->
+    <section id="v-numeros" class="oculto">
+      <div class="cab-num">
+        <h1 class="menor">Números</h1>
+        <label class="so-leitor" for="n-dias">Período</label>
+        <select id="n-dias"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Último ano</option></select>
+      </div>
+      <div class="kpis" id="n-kpis"></div>
+      <div class="grade-num">
+        <div class="card simples"><h2>Ocorrências por semana</h2><div id="g-semana"></div></div>
+        <div class="card simples"><h2>Por canal</h2><div id="g-canal"></div></div>
+        <div class="card simples"><h2>Por assunto</h2><div id="g-tipo"></div></div>
+        <div class="card simples"><h2>Por origem</h2><div id="g-origem"></div></div>
       </div>
     </section>
 

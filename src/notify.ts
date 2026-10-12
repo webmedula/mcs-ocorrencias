@@ -204,3 +204,30 @@ export async function enviarTelegram(texto: string): Promise<void> {
     console.error("[telegram]", e?.message);
   }
 }
+
+
+/** E-mail com o link para criar uma nova senha do painel. Lança em caso de falha (quem chama só registra no log). */
+export async function enviarRedefinicao(u: { nome: string; email: string }, link: string): Promise<void> {
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[mail] SMTP não configurado; link de redefinição para ${u.email} NÃO enviado.`);
+    return;
+  }
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
+    <h2 style="margin-bottom:4px">${esc(config.brandName)} — painel de triagem</h2>
+    <p>Olá, ${esc(u.nome)}. Recebemos um pedido para criar uma nova senha de acesso ao painel.</p>
+    <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:12px 18px;border-radius:10px;font-weight:bold;text-decoration:none">Criar nova senha</a></p>
+    <p style="font-size:13px;color:#555">O link vale por 1 hora e só pode ser usado uma vez. Se não foi você, ignore este e-mail: a sua senha continua a mesma.</p>
+  </div>`;
+  const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
+  const info = await t.sendMail({
+    from: config.mailFrom,
+    envelope: { from: envelopeFrom, to: u.email },
+    to: u.email,
+    subject: "Nova senha do painel de triagem",
+    html,
+    text: `Para criar uma nova senha do painel, abra (vale por 1 hora): ${link}\nSe não foi você, ignore este e-mail.`,
+  });
+  console.log(`[mail] redefinição de senha para ${u.email} · aceitos=${JSON.stringify(info.accepted)} · resposta="${info.response}"`);
+}
