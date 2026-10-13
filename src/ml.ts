@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { config, type Tipo } from "./config.js";
 import { db } from "./db.js";
-import { esc, enviarTelegram } from "./notify.js";
+import { esc, enviarTelegram, avisarEquipeEmail } from "./notify.js";
 import { gerarProtocolo } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
 
@@ -287,6 +287,8 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   const id = String(claim.id);
   const existente = db.prepare("SELECT * FROM ocorrencias WHERE ml_claim_id = ?").get(id) as any | undefined;
   const prazo = prazoDe(claim, vendedor);
+  // Apagada/anonimizada a pedido do titular: não importa de novo nem atualiza
+  if (db.prepare("SELECT 1 FROM ml_ignorados WHERE claim_id = ?").get(id)) return { nova: false, atualizada: false, mensagens: 0 };
 
   if (!existente) {
     if (claim.status === "closed") return { nova: false, atualizada: false, mensagens: 0 }; // não importa histórico já encerrado
@@ -336,6 +338,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
         `<a href="${esc(config.publicUrl)}/painel#${encodeURIComponent(protocolo)}">Abrir no painel</a>`,
       ].filter(Boolean).join("\n"),
     );
+    void avisarEquipeEmail("Nova reclamação no Mercado Livre", [`Protocolo ${protocolo} · pedido ${pedido}`, `Comprador: ${nome}`, `Motivo: ${motivo ?? claim.reason_id ?? "—"}`], protocolo);
     return { nova: true, atualizada: false, mensagens: n };
   }
 

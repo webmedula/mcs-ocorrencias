@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config.js";
 import { db } from "./db.js";
-import { enviarTelegram, esc } from "./notify.js";
+import { avisarEquipeEmail, enviarTelegram, esc } from "./notify.js";
+import { aplicarRetencao } from "./lgpd.js";
 
 /** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco. */
 
@@ -48,6 +49,7 @@ export async function alertarPrazos(): Promise<number> {
         `Reclamação ${esc(o.protocolo)} · pedido ${esc(o.pedido)} · ${esc(o.nome)}\n` +
         `<a href="${esc(link(o.protocolo))}">Abrir no painel</a>`,
     );
+    void avisarEquipeEmail(`Prazo no Mercado Livre: faltam ~${h} h`, [`Reclamação ${o.protocolo} · pedido ${o.pedido} · ${o.nome}`], o.protocolo);
     enviados++;
   }
   return enviados;
@@ -135,6 +137,7 @@ async function ciclo(): Promise<void> {
     await alertarPrazos();
     await resumoSeChegouAHora();
     await backupSeFaltar();
+    aplicarRetencao();
   } catch (e: any) {
     console.error("[rotinas]", e?.message);
   } finally {

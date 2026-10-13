@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.3.0 — painel interno
+// Central de Ocorrências v1.4.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -69,6 +69,7 @@
     if (nome === "ocorrencias") { carregarLista().then(() => abrirDoHash()); }
     if (nome === "equipe") carregarEquipe();
     if (nome === "numeros") carregarNumeros();
+    if (nome === "conta") api("GET", "/me").then((r) => { if (r.ok) $("#c-avisos").checked = Boolean(r.json.avisarEmail); });
   }
 
   // ---------- ocorrências ----------
@@ -166,6 +167,20 @@
     return sel;
   }
 
+  function botaoLgpd(o, acao, rotulo, aviso) {
+    const b = h("button", { type: "button", class: "sec mini perigo" }, rotulo);
+    b.addEventListener("click", async () => {
+      const t = window.prompt(`${aviso}\n\nPara confirmar, digite o protocolo (${o.protocolo}):`);
+      if (!t) return;
+      const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/${acao}`, { confirmar: t });
+      if (!r.ok) { window.alert(r.json.erro || "Não foi possível concluir."); return; }
+      if (acao === "excluir") { estado.aberto = null; history.replaceState(null, "", location.pathname); $("#detalhe").replaceChildren(h("p", { class: "vazio" }, "Ocorrência excluída.")); }
+      else await selecionar(o.protocolo, false);
+      carregarLista();
+    });
+    return b;
+  }
+
   function renderDetalhe(box, o) {
     const m = estado.meta;
     const tiny = o.tiny_status === "encontrado" && o.tiny
@@ -231,6 +246,14 @@
       } else { respMsg.textContent = r.json.erro || "Não foi possível enviar."; mostrar(respMsg, true); }
     });
 
+    const lgpd = h("div", { class: "lgpd" },
+      h("h3", {}, "Dados pessoais (LGPD)"),
+      h("p", { class: "aviso" }, o.anonimizada ? "Os dados pessoais desta ocorrência já foram removidos." : "A pedido do titular: baixe uma cópia dos dados ou remova-os."),
+      h("div", { class: "acoes-u" },
+        o.anonimizada ? null : h("a", { class: "botao-link", href: `/api/admin/ocorrencias/${encodeURIComponent(o.protocolo)}/exportar` }, "Baixar dados do titular"),
+        !o.anonimizada && estado.eu.papel === "gerente" ? botaoLgpd(o, "anonimizar", "Anonimizar", "Remove nome, e-mail, telefone, relato e fotos, mas mantém a ocorrência para as estatísticas.") : null,
+        estado.eu.papel === "gerente" ? botaoLgpd(o, "excluir", "Excluir tudo", "Apaga a ocorrência inteira, com histórico e fotos. Não dá para desfazer.") : null));
+
     box.append(
       h("div", { class: "cab" }, h("h2", {}, o.protocolo), h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
       h("p", { class: "meta" }, `${m.canais[o.canal] || o.canal} · pedido ${o.pedido} · ${m.tipos[o.tipo] || o.tipo}`),
@@ -242,8 +265,9 @@
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
       h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
-      formNota, ehMl ? formMl(o) : formResp,
-      h("h3", {}, "Histórico"), hist,
+      o.anonimizada ? h("p", { class: "faixa neutro" }, "Dados pessoais removidos: não é possível responder o cliente.") : null,
+      formNota, o.anonimizada ? null : ehMl ? formMl(o) : formResp,
+      h("h3", {}, "Histórico"), hist, lgpd,
     );
   }
 
@@ -444,9 +468,24 @@
         h("a", { class: "botao-link", href: "/api/admin/backups/" + encodeURIComponent(b.nome) }, "Baixar")));
   }
 
+  const ROT_REG = { login_ok: "Entrou", login_falha: "Senha errada", login_novo_ip: "Entrou de IP novo", alerta_falhas: "Alerta: várias senhas erradas",
+    redefinicao_pedida: "Pediu nova senha", senha_redefinida: "Nova senha por e-mail", senha_alterada: "Trocou a senha", usuario_criado: "Criou usuário",
+    usuario_alterado: "Alterou usuário", chave_criada: "Criou chave da IA", chave_revogada: "Revogou chave da IA", dados_exportados: "Baixou dados do titular",
+    ocorrencia_anonimizada: "Anonimizou ocorrência", ocorrencia_excluida: "Excluiu ocorrência" };
+  async function carregarRegistro() {
+    const r = await api("GET", "/registro?so=" + encodeURIComponent($("#reg-filtro").value));
+    const corpo = $("#registro");
+    corpo.replaceChildren();
+    if (!r.ok) return;
+    if (!r.json.length) corpo.append(h("tr", {}, h("td", { colspan: "4" }, "Nada registrado ainda.")));
+    for (const x of r.json)
+      corpo.append(h("tr", {}, h("td", {}, fmt(x.criado_em)), h("td", {}, x.quem || x.email || "—"),
+        h("td", {}, ROT_REG[x.tipo] || x.tipo, x.detalhe ? h("small", {}, x.detalhe) : null), h("td", { class: "col-m" }, x.ip || "—")));
+  }
+
   // ---------- equipe ----------
   async function carregarEquipe() {
-    carregarMl(); carregarModelos(); carregarQrs(); carregarBackups();
+    carregarMl(); carregarModelos(); carregarQrs(); carregarBackups(); carregarRegistro();
     const [u, k] = await Promise.all([api("GET", "/usuarios"), api("GET", "/chaves")]);
     if (u.ok) {
       const corpo = $("#usuarios");
@@ -542,6 +581,12 @@
   });
 
   $("#n-dias").addEventListener("change", carregarNumeros);
+  $("#reg-filtro").addEventListener("change", carregarRegistro);
+  $("#c-avisos").addEventListener("change", async (e) => {
+    const r = await api("POST", "/eu/avisos", { email: e.target.checked }), m = $("#avisos-ok");
+    m.textContent = r.ok ? (e.target.checked ? "Avisos por e-mail ligados." : "Avisos por e-mail desligados.") : (r.json.erro || "Não foi possível salvar.");
+    mostrar(m, true);
+  });
   $("#f-modelo").addEventListener("submit", async (e) => {
     e.preventDefault();
     erroEm($("#modelo-erro"), "");

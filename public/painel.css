@@ -135,3 +135,9 @@ button.link { background: none; border: 0; padding: 0; color: #a83300; text-deco
 .grade-num { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; margin-top: 20px; }
 .grade-num .card { margin: 0; }
 .grafico { max-height: 260px; }
+.lgpd { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--borda); }
+button.perigo { border-color: #b3261e; color: #b3261e; }
+.registro-card { margin-top: 20px; }
+.registro-card small { display: block; color: var(--suave); }
+.marcar { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
+.marcar input { width: auto; margin-top: 4px; }

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.0 — 2026-10-12
+
+Privacidade (LGPD), registro de acessos e aviso por e-mail à equipe.
+
+- **Política de privacidade** em `/privacidade.html`, preenchida com os dados da empresa (`PRIVACY_CONTROLADOR`, `PRIVACY_CNPJ`, `PRIVACY_CONTATO`). O link já aparece no formulário (se `PRIVACY_URL` ficar vazio, usa essa página). É um modelo: peça uma revisão jurídica antes de divulgar.
+- **Direitos do titular no painel** (dentro de cada ocorrência, "Dados pessoais (LGPD)"): *Baixar dados do titular* (JSON, qualquer pessoa da equipe), *Anonimizar* (remove nome, e-mail, telefone, relato, fotos e mensagens, mantém a ocorrência para as estatísticas) e *Excluir tudo* (gerente; pede para digitar o protocolo). Reclamação do Mercado Livre apagada ou anonimizada não é importada de novo.
+- **Retenção automática (opcional)**: com `RETENCAO_MESES` maior que 0, ocorrências resolvidas há mais tempo que isso são anonimizadas sozinhas. A política publicada muda o texto conforme esse valor.
+- **Registro de atividades** (Equipe, só gerente): logins e falhas com IP, trocas e pedidos de senha, usuários e chaves criados, dados baixados, anonimizações e exclusões. **Aviso no Telegram** para acesso de um IP novo e para 5 senhas erradas em 15 min na mesma conta.
+- **Aviso por e-mail à equipe**: cada pessoa liga em *Minha conta* e recebe e-mail de ocorrência nova, reclamação nova do Mercado Livre e prazo acabando.
+- Ocorrência anonimizada não aceita resposta ao cliente nem mensagem no Mercado Livre.
+
 ## v1.3.0 — 2026-10-12
 
 Recuperação de senha, modelos de resposta, alertas, números, backup e QR codes.

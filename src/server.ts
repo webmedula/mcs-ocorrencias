@@ -15,7 +15,7 @@ import { admin } from "./admin.js";
 import { MlErro, concluirAutorizacao, iniciarSincronizacaoML, sincronizar } from "./ml.js";
 import { iniciarRotinas } from "./rotinas.js";
 import { garantirPrimeiroGerente, limparSessoesVencidas } from "./auth.js";
-import { avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
+import { avisarEquipeEmail, avisarTelegram, enviarConfirmacao, verificarSmtp, descreverErroMail, type OcorrenciaResumo } from "./notify.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, "../public");
@@ -134,6 +134,10 @@ app.get("/api/config", (_req, res) => {
     emailSuporte: config.supportEmail,
     whatsapp: config.supportWhatsapp,
     privacidadeUrl: config.privacyUrl,
+    controlador: config.privacyControlador || config.brandName,
+    cnpj: config.privacyCnpj,
+    contatoPrivacidade: config.privacyContato || config.supportEmail,
+    retencaoMeses: config.retencaoMeses,
     canais: CANAIS,
     tipos: TIPOS,
   });
@@ -227,6 +231,7 @@ app.post("/api/ocorrencias", limiteEnvio, upload.array("fotos", 5), async (req, 
   };
   // Notificações não bloqueiam nem derrubam o envio
   avisarTelegram(resumo).catch((e) => console.error("[telegram]", e.message));
+  void avisarEquipeEmail(`Nova ocorrência ${resumo.protocolo}`, [`Canal: ${CANAIS[resumo.canal]} · Pedido: ${resumo.pedido}`, `Assunto: ${TIPOS[resumo.tipo]} · Cliente: ${resumo.nome}`], resumo.protocolo);
   enviarConfirmacao(resumo).catch((e) => console.error(`[mail] FALHA ao enviar ${protocolo} para ${d.email}: ${descreverErroMail(e)}`));
 
   res.status(201).json({ protocolo });

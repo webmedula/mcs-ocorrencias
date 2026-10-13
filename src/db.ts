@@ -89,6 +89,7 @@ const colunasOc = (db.prepare("PRAGMA table_info(ocorrencias)").all() as { name:
 if (!colunasOc.includes("origem")) db.exec("ALTER TABLE ocorrencias ADD COLUMN origem TEXT NOT NULL DEFAULT 'formulario'");
 if (!colunasOc.includes("ml_claim_id")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_claim_id TEXT");
 if (!colunasOc.includes("ml_json")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_json TEXT");
+if (!colunasOc.includes("anonimizada")) db.exec("ALTER TABLE ocorrencias ADD COLUMN anonimizada INTEGER NOT NULL DEFAULT 0");
 if (!colunasOc.includes("prazo_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN prazo_em TEXT");
 db.exec(`
 CREATE UNIQUE INDEX IF NOT EXISTS idx_oc_claim ON ocorrencias(ml_claim_id) WHERE ml_claim_id IS NOT NULL;
@@ -172,3 +173,21 @@ if ((db.prepare("SELECT COUNT(*) AS n FROM modelos").get() as { n: number }).n =
   ins.run("Novo envio / troca autorizada", "Olá, {nome}! Vamos resolver: enviaremos um novo produto referente ao pedido {pedido}. Assim que for despachado, enviaremos o rastreio. Obrigado pela paciência.");
   ins.run("Encerramento", "Olá, {nome}! Consideramos a ocorrência {protocolo} resolvida. Se ainda houver algo pendente, é só responder por aqui. Obrigado!");
 }
+
+// v1.4.0
+const colunasUsr = (db.prepare("PRAGMA table_info(usuarios)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasUsr.includes("avisar_email")) db.exec("ALTER TABLE usuarios ADD COLUMN avisar_email INTEGER NOT NULL DEFAULT 0");
+db.exec(`
+CREATE TABLE IF NOT EXISTS registro (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tipo TEXT NOT NULL,
+  usuario_id INTEGER,
+  email TEXT,
+  detalhe TEXT,
+  ip TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_registro_tipo ON registro(tipo, criado_em);
+-- Reclamações do ML que foram apagadas/anonimizadas a pedido do titular: não voltam na sincronização
+CREATE TABLE IF NOT EXISTS ml_ignorados (claim_id TEXT PRIMARY KEY, criado_em TEXT NOT NULL DEFAULT (datetime('now')));
+`);

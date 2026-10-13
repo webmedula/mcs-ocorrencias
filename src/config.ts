@@ -4,13 +4,19 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.3.0",
+  version: "1.4.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
   supportEmail: env.SUPPORT_EMAIL ?? "",
   supportWhatsapp: env.SUPPORT_WHATSAPP ?? "",
-  privacyUrl: env.PRIVACY_URL ?? "",
+  // Política de privacidade: se PRIVACY_URL ficar vazio, usa a página /privacidade.html desta própria Central
+  privacyUrl: env.PRIVACY_URL?.trim() || `${env.PUBLIC_URL ?? "http://localhost:3000"}/privacidade.html`,
+  privacyControlador: env.PRIVACY_CONTROLADOR ?? "",
+  privacyCnpj: env.PRIVACY_CNPJ ?? "",
+  privacyContato: env.PRIVACY_CONTATO ?? env.SUPPORT_EMAIL ?? "",
+  // 0 = não apaga sozinho. Acima de 0: anonimiza ocorrências resolvidas há mais de N meses
+  retencaoMeses: Math.max(0, Number(env.RETENCAO_MESES ?? 0)),
   protocolPrefix: env.PROTOCOL_PREFIX ?? "MCS",
   // Dados
   dataDir: path.resolve(env.DATA_DIR ?? "./data"),

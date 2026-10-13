@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { config, CANAIS, TIPOS, type Canal, type Tipo } from "./config.js";
 import type { TinyResultado } from "./tiny.js";
+import { db } from "./db.js";
 
 export const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -230,4 +231,30 @@ export async function enviarRedefinicao(u: { nome: string; email: string }, link
     text: `Para criar uma nova senha do painel, abra (vale por 1 hora): ${link}\nSe não foi você, ignore este e-mail.`,
   });
   console.log(`[mail] redefinição de senha para ${u.email} · aceitos=${JSON.stringify(info.accepted)} · resposta="${info.response}"`);
+}
+
+
+/** E-mail para quem ativou o aviso em "Minha conta". Nunca lança. */
+export async function avisarEquipeEmail(assunto: string, linhas: string[], protocolo?: string): Promise<void> {
+  try {
+    const t = getTransporter();
+    if (!t) return;
+    const destinos = db.prepare("SELECT nome, email FROM usuarios WHERE ativo = 1 AND avisar_email = 1").all() as { nome: string; email: string }[];
+    if (!destinos.length) return;
+    const link = `${config.publicUrl}/painel${protocolo ? "#" + encodeURIComponent(protocolo) : ""}`;
+    const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
+      <h3 style="margin-bottom:6px">${esc(assunto)}</h3>
+      ${linhas.map((l) => `<p style="margin:4px 0">${esc(l)}</p>`).join("")}
+      <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:10px 16px;border-radius:10px;font-weight:bold;text-decoration:none">Abrir no painel</a></p>
+      <p style="font-size:12px;color:#777">Você recebe este aviso porque ativou em Minha conta. Para parar, desmarque lá.</p></div>`;
+    const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
+    for (const d of destinos) {
+      await t.sendMail({
+        from: config.mailFrom, envelope: { from: envelopeFrom, to: d.email }, to: d.email,
+        subject: assunto, html, text: `${assunto}\n${linhas.join("\n")}\n${link}`,
+      }).catch((e: any) => console.error(`[mail] aviso à equipe para ${d.email}:`, e?.message));
+    }
+  } catch (e: any) {
+    console.error("[mail] aviso à equipe:", e?.message);
+  }
 }

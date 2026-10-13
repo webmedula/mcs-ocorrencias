@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.3.0
+# API do Gerente IA — Central de Ocorrências v1.4.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -22,10 +22,12 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | **Responder o comprador no Mercado Livre** | `POST /ocorrencias/{protocolo}/ml/mensagem` `{"texto":"…"}` (até 2000 caracteres; 20 por hora) | sim |
 | Ler modelos de resposta | `GET /modelos?protocolo={protocolo}` (traz `texto_pronto` já com nome, protocolo e pedido) | sim |
 | Criar/editar modelos | `POST/PATCH/DELETE /modelos` | **não** |
+| Baixar/anonimizar/excluir dados de uma ocorrência | `/ocorrencias/{protocolo}/exportar`, `/anonimizar`, `/excluir` | **não** |
 | Responder o cliente (envia e-mail) | `POST /ocorrencias/{protocolo}/resposta` | **não** |
 | Ver fotos | `GET /anexos/{id}` | **não** |
 | Números (contagens, tempos) | `GET /estatisticas?dias=7\|30\|90\|365` | sim |
 | Backups | `/backups` | **não** |
+| Registro de atividades | `GET /registro` | **não** |
 | Equipe e chaves | `/usuarios`, `/chaves` | **não** |
 
 Tudo que a chave faz fica no histórico com o autor **Gerente IA**.

@@ -169,6 +169,15 @@
           <div class="acoes-u"><button type="button" class="sec mini" id="b-agora">Fazer backup agora</button><a class="botao-link" href="/api/admin/backups/fotos.tar.gz">Baixar todas as fotos (.tar.gz)</a></div>
         </div>
       </div>
+      <div class="card simples registro-card">
+        <div class="cab-num">
+          <h2>Registro de atividades</h2>
+          <label class="so-leitor" for="reg-filtro">Mostrar</label>
+          <select id="reg-filtro"><option value="acessos">Só acessos (logins)</option><option value="">Tudo (inclui exclusões e trocas de senha)</option></select>
+        </div>
+        <p class="aviso">Guardamos quem entrou, de qual IP, trocas de senha e exclusões de dados. Acesso de um IP novo e várias senhas erradas geram aviso no Telegram.</p>
+        <div class="tabela-rolagem"><table><thead><tr><th scope="col">Quando</th><th scope="col">Quem</th><th scope="col">O que</th><th scope="col" class="col-m">IP</th></tr></thead><tbody id="registro"></tbody></table></div>
+      </div>
     </section>
 
     <!-- Números -->
@@ -190,6 +199,11 @@
     <!-- Conta -->
     <section id="v-conta" class="oculto">
       <h1 class="menor">Minha conta</h1>
+      <form id="f-avisos" class="card simples login" novalidate>
+        <h2>Avisos por e-mail</h2>
+        <label class="marcar"><input type="checkbox" id="c-avisos"> Receber um e-mail quando chegar ocorrência nova ou prazo do Mercado Livre estiver acabando</label>
+        <p id="avisos-ok" class="msg-ok oculto" role="status"></p>
+      </form>
       <form id="f-senha" class="card simples login" novalidate>
         <div id="senha-erro" class="erro-geral oculto" role="alert"></div>
         <p id="senha-ok" class="ok-msg oculto" role="status">Senha alterada.</p>

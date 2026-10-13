@@ -1,4 +1,4 @@
-# Central de Ocorrências — v1.3.0
+# Central de Ocorrências — v1.4.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
@@ -111,3 +111,12 @@ Tabelas extras: `ml_conexao`, `ml_estados`, `ml_mensagens`, `ml_envios`.
 - **Backup diário** do banco em `/data/backups` + download do banco e das fotos pelo gerente.
 
 Tabelas extras: `redefinicoes`, `modelos`, `alertas_prazo`, `rotinas_estado`.
+
+## Novidades da v1.4.0
+
+- `/privacidade.html` (política de privacidade) preenchida por `PRIVACY_*`.
+- Painel: baixar dados do titular, anonimizar e excluir ocorrência; retenção automática opcional (`RETENCAO_MESES`).
+- Equipe: registro de atividades (logins, trocas de senha, exclusões) com alertas no Telegram.
+- Minha conta: aviso por e-mail de ocorrência nova e prazos.
+
+Tabelas extras: `registro`, `ml_ignorados`; colunas `ocorrencias.anonimizada` e `usuarios.avisar_email`.

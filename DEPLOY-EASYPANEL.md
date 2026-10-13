@@ -1,4 +1,4 @@
-# Deploy no Easypanel — Central de Ocorrências v1.3.0
+# Deploy no Easypanel — Central de Ocorrências v1.4.0
 
 Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.mcs.ind.br**
 (o DNS `*.mcs.ind.br` já aponta para o VPS, então não é preciso criar registro).
@@ -120,3 +120,10 @@ Não há passo obrigatório: é só subir a versão e implantar. O que muda para
 2. **Telegram**: o resumo diário sai às 8 h (horário de Brasília) e o alerta de prazo do Mercado Livre sai sozinho. Para mudar a hora, defina `RESUMO_HORA` (ou `-1` para desligar).
 3. **Backup**: o banco é copiado todo dia para `/data/backups` (volume `ocorrencias-data`). Isso protege de erro, não de perder o volume. De vez em quando, baixe o banco e as fotos em **Equipe → Backup** e guarde fora do servidor.
 4. **QR codes**: em **Equipe**, baixe o QR de cada canal (PNG para imprimir, SVG para design) e coloque nos encartes.
+
+## Novidades da v1.4.0
+
+1. No Easypanel, acrescente `PRIVACY_CONTROLADOR` (razão social), `PRIVACY_CNPJ` e `PRIVACY_CONTATO` (e-mail para os pedidos dos titulares) e implante. A política fica em `https://atendimento.mcs.ind.br/privacidade.html` e o link aparece sozinho no formulário. Peça a revisão do texto a um advogado antes de divulgar.
+2. `RETENCAO_MESES` é opcional: com `24`, por exemplo, as ocorrências resolvidas há mais de 24 meses têm os dados pessoais removidos automaticamente. Deixe `0` se ainda não decidiu o prazo.
+3. Cada pessoa da equipe liga o aviso por e-mail em **Minha conta**.
+4. Pedido de um cliente para apagar os dados: abra a ocorrência e use **Anonimizar** ou **Excluir tudo** (só gerente).

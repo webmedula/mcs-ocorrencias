@@ -13,6 +13,8 @@ import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import QRCode from "qrcode";
+import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
+import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
 import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 
@@ -47,7 +49,13 @@ admin.post("/login", limiteLogin, (req, res) => {
   if (!p.success) return res.status(400).json({ erro: "Informe e-mail e senha." });
   const u = db.prepare("SELECT * FROM usuarios WHERE email = ?").get(p.data.email) as any | undefined;
   const ok = u ? conferirSenha(p.data.senha, u.senha_hash) : (gastarTempo(p.data.senha), false);
-  if (!u || !ok || !u.ativo) return res.status(401).json({ erro: "E-mail ou senha incorretos." });
+  if (!u || !ok || !u.ativo) {
+    registrar("login_falha", { usuarioId: u?.id, email: p.data.email, detalhe: u && ok && !u.ativo ? "conta desativada" : null, req });
+    if (u) checarFalhas(p.data.email);
+    return res.status(401).json({ erro: "E-mail ou senha incorretos." });
+  }
+  checarLoginNovo(u, req);
+  registrar("login_ok", { usuarioId: u.id, email: u.email, req });
   db.prepare("UPDATE usuarios SET ultimo_login = datetime('now') WHERE id = ?").run(u.id);
   criarSessao(res, u.id);
   res.json({ nome: u.nome, email: u.email, papel: u.papel });
@@ -61,7 +69,9 @@ admin.post("/logout", (req, res) => {
 admin.get("/me", (req, res) => {
   const a = req.ator;
   if (!a) return res.status(401).json({ erro: "Não autenticado." });
-  res.json(a.tipo === "usuario" ? { tipo: "usuario", nome: a.nome, email: a.email, papel: a.papel } : { tipo: "ia", nome: a.nome });
+  if (a.tipo !== "usuario") return res.json({ tipo: "ia", nome: a.nome });
+  const av = db.prepare("SELECT avisar_email FROM usuarios WHERE id = ?").get(a.id) as { avisar_email: number } | undefined;
+  res.json({ tipo: "usuario", nome: a.nome, email: a.email, papel: a.papel, avisarEmail: Boolean(av?.avisar_email) });
 });
 
 // Tudo abaixo exige estar logado (pessoa ou chave do Gerente IA)
@@ -84,6 +94,7 @@ admin.post("/esqueci", limiteEsqueci, async (req, res) => {
     const token = crypto.randomBytes(32).toString("hex");
     db.prepare("DELETE FROM redefinicoes WHERE usuario_id = ?").run(u.id);
     db.prepare("INSERT INTO redefinicoes (token_hash, usuario_id, expira_em) VALUES (?,?, datetime('now','+60 minutes'))").run(sha(token), u.id);
+    registrar("redefinicao_pedida", { usuarioId: u.id, email: u.email, req });
     try { await enviarRedefinicao(u, `${config.publicUrl}/painel#redefinir=${token}`); }
     catch (e: any) { console.error("[painel] falha ao enviar redefinição:", e?.message); }
   }
@@ -107,6 +118,7 @@ admin.post("/redefinir", limiteRedefinir, (req, res) => {
     db.prepare("DELETE FROM redefinicoes WHERE usuario_id = ?").run(r.usuario_id);
     db.prepare("DELETE FROM sessoes WHERE usuario_id = ?").run(r.usuario_id);
   })();
+  registrar("senha_redefinida", { usuarioId: r.usuario_id, detalhe: "por link de e-mail", req });
   res.json({ ok: true });
 });
 
@@ -201,6 +213,7 @@ admin.post("/ocorrencias/:protocolo/resposta", soPessoas, async (req, res) => {
   if (!p.success) return invalido(res, p.error);
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.anonimizada) return res.status(400).json({ erro: "Os dados desta ocorrência foram removidos." });
   if (o.origem === "ml") return res.status(400).json({ erro: "Reclamações do Mercado Livre são respondidas pela mensagem do próprio Mercado Livre." });
   db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,1,?)").run(o.id, p.data.texto, nomeDoAtor(req.ator!));
   db.prepare("UPDATE ocorrencias SET atualizado_em = datetime('now') WHERE id = ?").run(o.id);
@@ -246,6 +259,7 @@ admin.post("/ocorrencias/:protocolo/ml/mensagem", async (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.origem !== "ml") return res.status(400).json({ erro: "Esta ocorrência não veio do Mercado Livre." });
+  if (o.anonimizada) return res.status(400).json({ erro: "Os dados desta ocorrência foram removidos." });
   const a = req.ator!;
   if (!dentroDoLimite(`${a.tipo}:${a.id}`, a.tipo === "ia" ? 20 : 120))
     return res.status(429).json({ erro: "Muitas mensagens na última hora. Aguarde um pouco." });
@@ -292,7 +306,15 @@ admin.post("/eu/senha", soPessoas, (req, res) => {
   db.prepare("UPDATE usuarios SET senha_hash = ? WHERE id = ?").run(hashSenha(p.data.nova), a.id);
   db.prepare("DELETE FROM sessoes WHERE usuario_id = ?").run(a.id);
   criarSessao(res, a.id);
+  registrar("senha_alterada", { usuarioId: a.id, detalhe: "pela própria pessoa", req });
   res.json({ ok: true });
+});
+
+admin.post("/eu/avisos", soPessoas, (req, res) => {
+  const p = z.object({ email: z.boolean() }).safeParse(req.body);
+  if (!p.success) return res.status(400).json({ erro: "Dados inválidos." });
+  db.prepare("UPDATE usuarios SET avisar_email = ? WHERE id = ?").run(p.data.email ? 1 : 0, (req.ator as { id: number }).id);
+  res.json({ ok: true, avisarEmail: p.data.email });
 });
 
 // ---------- Equipe (só gerente) ----------
@@ -315,6 +337,7 @@ admin.post("/usuarios", soGerente, (req, res) => {
     const r = db
       .prepare("INSERT INTO usuarios (nome, email, senha_hash, papel) VALUES (?,?,?,?)")
       .run(p.data.nome, p.data.email, hashSenha(p.data.senha), p.data.papel);
+    registrar("usuario_criado", { usuarioId: (req.ator as { id: number }).id, email: p.data.email, detalhe: `perfil ${p.data.papel}`, req });
     res.status(201).json({ id: Number(r.lastInsertRowid) });
   } catch (e: any) {
     if (e?.code === "SQLITE_CONSTRAINT_UNIQUE") return res.status(409).json({ erro: "Já existe um usuário com esse e-mail." });
@@ -349,6 +372,7 @@ admin.patch("/usuarios/:id", soGerente, (req, res) => {
     if (p.data.senha !== undefined) db.prepare("UPDATE usuarios SET senha_hash = ? WHERE id = ?").run(hashSenha(p.data.senha), alvo.id);
     if (p.data.senha !== undefined || !novoAtivo) db.prepare("DELETE FROM sessoes WHERE usuario_id = ?").run(alvo.id);
   })();
+  registrar("usuario_alterado", { usuarioId: eu.id, email: alvo.email, detalhe: [p.data.senha !== undefined ? "senha trocada" : "", p.data.ativo !== undefined ? (novoAtivo ? "reativado" : "desativado") : "", p.data.papel ? `perfil ${novoPapel}` : ""].filter(Boolean).join(", ") || "dados", req });
   res.json({ ok: true });
 });
 
@@ -365,6 +389,7 @@ admin.post("/chaves", soGerente, (req, res) => {
     .prepare("INSERT INTO chaves_api (nome, prefixo, token_hash, criado_por) VALUES (?,?,?,?)")
     .run(p.data.nome, prefixo, hash, nomeDoAtor(req.ator!));
   // O token só aparece agora; depois só o prefixo fica visível.
+  registrar("chave_criada", { usuarioId: (req.ator as { id: number }).id, detalhe: p.data.nome, req });
   res.status(201).json({ id: Number(r.lastInsertRowid), token });
 });
 
@@ -372,6 +397,7 @@ admin.delete("/chaves/:id", soGerente, (req, res) => {
   const id = campoId.safeParse(req.params.id);
   if (!id.success) return res.status(400).json({ erro: "Chave inválida." });
   db.prepare("UPDATE chaves_api SET ativa = 0 WHERE id = ?").run(id.data);
+  registrar("chave_revogada", { usuarioId: (req.ator as { id: number }).id, detalhe: `chave ${id.data}`, req });
   res.json({ ok: true });
 });
 
@@ -472,6 +498,50 @@ admin.get("/backups/:nome", soGerente, (req, res) => {
   if (!/^ocorrencias-\d{4}-\d{2}-\d{2}\.db$/.test(nome) || !fs.existsSync(path.join(pastaBackups, nome)))
     return res.status(404).json({ erro: "Backup não encontrado." });
   res.download(path.join(pastaBackups, nome), nome);
+});
+
+
+// ---------- Dados pessoais / LGPD (v1.4.0) ----------
+const confirmacao = z.object({ confirmar: z.string() });
+
+admin.get("/ocorrencias/:protocolo/exportar", soPessoas, (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  registrar("dados_exportados", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
+  res.setHeader("Content-Disposition", `attachment; filename="dados-${o.protocolo}.json"`);
+  res.type("application/json").send(JSON.stringify(exportarDados(o), null, 2));
+});
+
+admin.post("/ocorrencias/:protocolo/anonimizar", soGerente, (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  const p = confirmacao.safeParse(req.body);
+  if (!p.success || p.data.confirmar.trim().toUpperCase() !== o.protocolo) return res.status(400).json({ erro: "Digite o protocolo para confirmar." });
+  anonimizar(o.id);
+  registrar("ocorrencia_anonimizada", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
+  res.json({ ok: true });
+});
+
+admin.post("/ocorrencias/:protocolo/excluir", soGerente, (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  const p = confirmacao.safeParse(req.body);
+  if (!p.success || p.data.confirmar.trim().toUpperCase() !== o.protocolo) return res.status(400).json({ erro: "Digite o protocolo para confirmar." });
+  excluir(o.id);
+  registrar("ocorrencia_excluida", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
+  res.json({ ok: true });
+});
+
+// ---------- Registro de atividades (só gerente) ----------
+admin.get("/registro", soGerente, (req, res) => {
+  const so = String(req.query.so ?? "");
+  const where = so === "acessos" ? "WHERE r.tipo LIKE 'login%' OR r.tipo LIKE 'alerta%'" : "";
+  res.json(
+    db.prepare(
+      `SELECT r.id, r.tipo, COALESCE(u.nome, r.email) AS quem, r.email, r.detalhe, r.ip, r.criado_em
+       FROM registro r LEFT JOIN usuarios u ON u.id = r.usuario_id ${where} ORDER BY r.id DESC LIMIT 100`,
+    ).all(),
+  );
 });
 
 admin.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
