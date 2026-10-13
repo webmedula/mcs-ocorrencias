@@ -171,7 +171,8 @@
   function botaoLgpd(o, acao, rotulo, aviso) {
     const b = h("button", { type: "button", class: "sec mini perigo" }, rotulo);
     b.addEventListener("click", async () => {
-      const t = window.prompt(`${aviso}\n\nPara confirmar, digite o protocolo (${o.protocolo}):`);
+      const palavra = acao === "excluir" ? "EXCLUIR" : "ANONIMIZAR";
+      const t = window.prompt(`${aviso}\n\nPara confirmar, digite ${palavra}:`);
       if (!t) return;
       const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/${acao}`, { confirmar: t });
       if (!r.ok) { window.alert(r.json.erro || "Não foi possível concluir."); return; }

@@ -522,6 +522,11 @@ admin.get("/backups/:nome", soGerente, (req, res) => {
 
 // ---------- Dados pessoais / LGPD (v1.4.0) ----------
 const confirmacao = z.object({ confirmar: z.string() });
+// Confirmação simples: a palavra da ação (ou, como antes, o protocolo).
+const confirmou = (texto: string, palavra: string, protocolo: string) => {
+  const t = texto.trim().toUpperCase();
+  return t === palavra || t === protocolo;
+};
 
 admin.get("/ocorrencias/:protocolo/exportar", soPessoas, (req, res) => {
   const o = oc(req.params.protocolo);
@@ -535,7 +540,7 @@ admin.post("/ocorrencias/:protocolo/anonimizar", soGerente, (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   const p = confirmacao.safeParse(req.body);
-  if (!p.success || p.data.confirmar.trim().toUpperCase() !== o.protocolo) return res.status(400).json({ erro: "Digite o protocolo para confirmar." });
+  if (!p.success || !confirmou(p.data.confirmar, "ANONIMIZAR", o.protocolo)) return res.status(400).json({ erro: "Digite ANONIMIZAR para confirmar." });
   anonimizar(o.id);
   registrar("ocorrencia_anonimizada", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
   res.json({ ok: true });
@@ -545,7 +550,7 @@ admin.post("/ocorrencias/:protocolo/excluir", soGerente, (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   const p = confirmacao.safeParse(req.body);
-  if (!p.success || p.data.confirmar.trim().toUpperCase() !== o.protocolo) return res.status(400).json({ erro: "Digite o protocolo para confirmar." });
+  if (!p.success || !confirmou(p.data.confirmar, "EXCLUIR", o.protocolo)) return res.status(400).json({ erro: "Digite EXCLUIR para confirmar." });
   excluir(o.id);
   registrar("ocorrencia_excluida", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
   res.json({ ok: true });

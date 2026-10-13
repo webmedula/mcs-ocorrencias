@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.5.2 — 2026-10-13
+
+- Correção: **enviar resposta ao comprador no Mercado Livre** falhava com "Request method 'POST' is not supported". O envio agora usa o endereço correto da API (`/actions/send-message`).
+
+## v1.5.1 — 2026-10-13
+
+- Excluir e anonimizar ocorrência agora pedem para **digitar a palavra** `EXCLUIR` ou `ANONIMIZAR` (antes era o protocolo inteiro). Digitar o protocolo continua funcionando.
+
 ## v1.5.0 — 2026-10-13
 
 Foto e dados do produto nas reclamações do Mercado Livre.

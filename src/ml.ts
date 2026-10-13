@@ -510,7 +510,8 @@ export async function enviarMensagem(oc: any, texto: string, autor: string): Pro
   const destinatario = claim?.stage === "dispute" ? "mediator" : "complainant";
   db.prepare("INSERT INTO ml_envios (claim_id, texto_hash, autor) VALUES (?,?,?)").run(claimId, hashTxt(t), autor);
   try {
-    await ml(`/post-purchase/v1/claims/${encodeURIComponent(claimId)}/messages`, {
+    // O envio usa /actions/send-message; o /messages só aceita leitura (GET).
+    await ml(`/post-purchase/v1/claims/${encodeURIComponent(claimId)}/actions/send-message`, {
       metodo: "POST",
       corpo: { receiver_role: destinatario, message: t },
     });
