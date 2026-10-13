@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { config, type Tipo } from "./config.js";
 import { db } from "./db.js";
 import { esc, enviarTelegram, avisarEquipeEmail } from "./notify.js";
@@ -167,6 +169,76 @@ async function ml(caminho: string, init: { metodo?: string; corpo?: unknown } = 
   return j;
 }
 
+// ---------- Produto do pedido (foto, título, SKU) ----------
+export interface ProdutoMl {
+  item_id: string | null; titulo: string | null; sku: string | null; qtd: number | null;
+  preco: number | null; permalink: string | null; foto: string | null; variacao: string | null;
+}
+export const pastaProdutos = path.join(config.dataDir, "produtos");
+const FOTO_MAX = 3 * 1024 * 1024;
+
+function hostConfiavel(u: URL): boolean {
+  if (u.protocol !== "https:" && u.origin !== new URL(config.mlApiBase).origin) return false;
+  return /(^|\.)mlstatic\.com$/i.test(u.hostname) || u.origin === new URL(config.mlApiBase).origin;
+}
+
+/** Baixa a foto uma vez e guarda no volume (continua valendo se o anúncio mudar). Devolve o nome do arquivo. */
+async function guardarFoto(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const u = new URL(url.replace(/^http:\/\/(?=[^/]*mlstatic\.com)/i, "https://"));
+    if (!hostConfiavel(u)) return null;
+    const nomeBase = crypto.createHash("sha1").update(u.href).digest("hex").slice(0, 16);
+    fs.mkdirSync(pastaProdutos, { recursive: true });
+    for (const ext of ["jpg", "png", "webp"]) if (fs.existsSync(path.join(pastaProdutos, `${nomeBase}.${ext}`))) return `${nomeBase}.${ext}`;
+    const res = await fetch(u, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const tipo = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    const ext = tipo === "image/png" ? "png" : tipo === "image/webp" ? "webp" : tipo === "image/jpeg" ? "jpg" : null;
+    if (!ext) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0 || buf.length > FOTO_MAX) return null;
+    fs.writeFileSync(path.join(pastaProdutos, `${nomeBase}.${ext}`), buf);
+    return `${nomeBase}.${ext}`;
+  } catch (e: any) {
+    console.error(`[ml] foto do produto: ${e?.message}`);
+    return null;
+  }
+}
+
+/** Itens do pedido com foto do anúncio (ou da variação comprada). Nunca lança. */
+export async function produtosDoPedido(pedido: any): Promise<ProdutoMl[]> {
+  const out: ProdutoMl[] = [];
+  for (const oi of (pedido?.order_items ?? []).slice(0, 5)) {
+    const it = oi?.item ?? {};
+    let anuncio: any = null;
+    if (it.id) {
+      try { anuncio = await ml(`/items/${encodeURIComponent(String(it.id))}`); }
+      catch (e: any) { console.error(`[ml] anúncio ${it.id}: ${e?.message}`); }
+    }
+    const fotos: any[] = Array.isArray(anuncio?.pictures) ? anuncio.pictures : [];
+    let url: string | undefined;
+    const vid = it.variation_id != null ? String(it.variation_id) : null;
+    const variacao = vid ? (anuncio?.variations ?? []).find((v: any) => String(v.id) === vid) : null;
+    const picId = variacao?.picture_ids?.[0];
+    if (picId) url = fotos.find((f) => f.id === picId)?.secure_url ?? fotos.find((f) => f.id === picId)?.url;
+    url = url ?? fotos[0]?.secure_url ?? fotos[0]?.url ?? anuncio?.secure_thumbnail ?? anuncio?.thumbnail;
+    const attrs = (it.variation_attributes ?? variacao?.attribute_combinations ?? [])
+      .map((a: any) => a?.value_name ?? a?.value).filter(Boolean).join(" / ");
+    out.push({
+      item_id: it.id ? String(it.id) : null,
+      titulo: it.title ?? anuncio?.title ?? null,
+      sku: it.seller_sku ?? it.seller_custom_field ?? variacao?.seller_custom_field ?? anuncio?.seller_custom_field ?? null,
+      qtd: typeof oi.quantity === "number" ? oi.quantity : null,
+      preco: typeof oi.unit_price === "number" ? oi.unit_price : null,
+      permalink: anuncio?.permalink ?? null,
+      foto: await guardarFoto(url),
+      variacao: attrs || null,
+    });
+  }
+  return out;
+}
+
 // ---------- Mapeamento ----------
 const tipoDoMotivo = (reasonId: string, tipoClaim: string): Tipo => {
   if (tipoClaim === "return") return "troca_devolucao";
@@ -259,20 +331,22 @@ async function sincronizarAgora(): Promise<ResultadoSync> {
   return res;
 }
 
-async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string; titulo: string | null }> {
+async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string; titulo: string | null; produtos: ProdutoMl[] }> {
   const rid = claim.resource_id != null ? String(claim.resource_id) : String(claim.id);
   let nome = "Comprador do Mercado Livre";
   let titulo: string | null = null;
+  let produtos: ProdutoMl[] = [];
   if (claim.resource === "order" || claim.resource === undefined) {
     try {
       const o = await ml(`/orders/${encodeURIComponent(rid)}`);
       nome = o?.buyer?.nickname || (o?.buyer?.id ? `Comprador ${o.buyer.id}` : nome);
       titulo = o?.order_items?.[0]?.item?.title ?? null;
+      produtos = await produtosDoPedido(o);
     } catch (e: any) {
       console.error(`[ml] não consegui ler o pedido ${rid}: ${e?.message}`);
     }
   }
-  return { pedido: rid, nome, titulo };
+  return { pedido: rid, nome, titulo, produtos };
 }
 
 async function motivoDe(reasonId: string | null): Promise<string | null> {
@@ -293,7 +367,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   if (!existente) {
     if (claim.status === "closed") return { nova: false, atualizada: false, mensagens: 0 }; // não importa histórico já encerrado
     const motivo = await motivoDe(claim.reason_id ?? null);
-    const { pedido, nome, titulo } = await dadosDoPedido(claim);
+    const { pedido, nome, titulo, produtos } = await dadosDoPedido(claim);
     const tiny = await buscarPedido(pedido);
     const msgs = await baixarMensagens(id);
     const primeira = msgs.find((m) => m.sender_role === "complainant")?.message;
@@ -311,12 +385,12 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
         try {
           const r = db.prepare(
             `INSERT INTO ocorrencias (protocolo, canal, pedido, tipo, descricao, nome, email, telefone, tiny_status, tiny_json,
-                                      origem, ml_claim_id, ml_json, prazo_em)
-             VALUES (?, 'mercado_livre', ?, ?, ?, ?, '', NULL, ?, ?, 'ml', ?, ?, ?)`,
+                                      origem, ml_claim_id, ml_json, prazo_em, produto_json)
+             VALUES (?, 'mercado_livre', ?, ?, ?, ?, '', NULL, ?, ?, 'ml', ?, ?, ?, ?)`,
           ).run(
             protocolo, pedido, tipoDoMotivo(claim.reason_id ?? "", claim.type ?? ""), descricao, nome,
             tiny.status, tiny.status === "encontrado" ? JSON.stringify(tiny.pedido) : null,
-            id, JSON.stringify(resumoClaim(claim, vendedor, motivo)), prazo,
+            id, JSON.stringify(resumoClaim(claim, vendedor, motivo)), prazo, produtos.length ? JSON.stringify(produtos) : null,
           );
           ocId = Number(r.lastInsertRowid);
           break;
@@ -342,7 +416,12 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
     return { nova: true, atualizada: false, mensagens: n };
   }
 
-  // Já conhecida: atualiza resumo/prazo, confere encerramento e novas mensagens
+  // Já conhecida. Reclamações importadas antes da v1.5.0 ainda não têm a foto do produto: busca agora
+  if (!existente.produto_json && !existente.anonimizada && existente.status !== "resolvida") {
+    const { produtos } = await dadosDoPedido(claim);
+    if (produtos.length) db.prepare("UPDATE ocorrencias SET produto_json = ? WHERE id = ?").run(JSON.stringify(produtos), existente.id);
+  }
+  // Atualiza resumo/prazo, confere encerramento e novas mensagens
   const anterior = existente.ml_json ? JSON.parse(existente.ml_json) : {};
   const mudou = anterior.last_updated !== (claim.last_updated ?? null) || anterior.status !== (claim.status ?? null);
   let mensagens = 0;

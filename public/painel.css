@@ -141,3 +141,13 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .registro-card small { display: block; color: var(--suave); }
 .marcar { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
 .marcar input { width: auto; margin-top: 4px; }
+
+/* v1.5.0 — foto do produto */
+.mini-prod { float: left; width: 44px; height: 44px; object-fit: cover; border-radius: 8px; border: 1px solid var(--borda); margin-right: 10px; background: #fff; }
+.item-oc td:first-child::after { content: ""; display: block; clear: both; }
+.produtos { margin: 14px 0; }
+.produto { display: flex; gap: 14px; align-items: flex-start; padding: 10px; border: 1px solid var(--borda); border-radius: 12px; background: #fff; margin-bottom: 8px; }
+.produto img, .produto .sem-foto { width: 96px; height: 96px; flex: none; object-fit: cover; border-radius: 10px; border: 1px solid var(--borda); background: #faf6f2; }
+.produto .sem-foto { display: flex; align-items: center; justify-content: center; font-size: .75rem; color: var(--suave); }
+.produto small { display: block; color: var(--suave); margin: 2px 0 6px; }
+.produto a { font-size: .85rem; }

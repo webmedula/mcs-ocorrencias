@@ -16,7 +16,7 @@ import QRCode from "qrcode";
 import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
 import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
-import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import { pastaProdutos, MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
 export const admin = express.Router();
@@ -125,6 +125,20 @@ admin.post("/redefinir", limiteRedefinir, (req, res) => {
 admin.use(exigirLogin);
 
 // ---------- Ocorrências ----------
+function produtosDe(json: string | null | undefined): any[] {
+  try { const j = json ? JSON.parse(json) : []; return Array.isArray(j) ? j : []; } catch { return []; }
+}
+
+// Foto do produto (guardada no volume). Só quem está logado.
+admin.get("/produto-img/:arquivo", (req, res) => {
+  const a = req.params.arquivo;
+  if (!/^[a-f0-9]{16}\.(jpg|png|webp)$/.test(a)) return res.status(404).json({ erro: "Imagem não encontrada." });
+  const caminho = path.join(pastaProdutos, a);
+  if (!fs.existsSync(caminho)) return res.status(404).json({ erro: "Imagem não encontrada." });
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.sendFile(caminho);
+});
+
 admin.get("/ocorrencias", (req, res) => {
   const q = String(req.query.q ?? "").trim().slice(0, 80);
   const canal = String(req.query.canal ?? "");
@@ -147,11 +161,16 @@ admin.get("/ocorrencias", (req, res) => {
   const total = (db.prepare(`SELECT COUNT(*) AS n FROM ocorrencias ${cond}`).get(...args) as { n: number }).n;
   const itens = db
     .prepare(
-      `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em,
+      `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em, produto_json,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos
        FROM ocorrencias o ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ? OFFSET ?`,
     )
-    .all(...args, porPagina, (pagina - 1) * porPagina);
+    .all(...args, porPagina, (pagina - 1) * porPagina)
+    .map((r: any) => {
+      const { produto_json, ...resto } = r;
+      const p = produtosDe(produto_json)[0];
+      return { ...resto, produto: p ? { foto: p.foto, titulo: p.titulo } : null };
+    });
   const contagem: Record<string, number> = Object.fromEntries(statusKeys.map((k) => [k, 0]));
   for (const r of db.prepare("SELECT status, COUNT(*) AS n FROM ocorrencias GROUP BY status").all() as { status: string; n: number }[])
     contagem[r.status] = r.n;
@@ -167,7 +186,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
     .all(o.id);
   let tiny: unknown = null;
   try { tiny = o.tiny_json ? JSON.parse(o.tiny_json) : null; } catch { /* ignora */ }
-  const { ip_hash: _ip, tiny_json: _t, ml_json: mlJson, ...resto } = o;
+  const { ip_hash: _ip, tiny_json: _t, ml_json: mlJson, produto_json: pj, ...resto } = o;
   let ml: unknown = null;
   if (o.origem === "ml") {
     let claim: any = null;
@@ -177,7 +196,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj) });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {

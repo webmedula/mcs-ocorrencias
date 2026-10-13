@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.4.0
+# API do Gerente IA — Central de Ocorrências v1.5.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -33,6 +33,8 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 Tudo que a chave faz fica no histórico com o autor **Gerente IA**.
 
 ### Reclamações do Mercado Livre
+
+O detalhe traz também `produtos`: lista com `titulo`, `sku`, `variacao`, `qtd`, `preco`, `permalink` (anúncio) e `foto` (arquivo guardado na Central; para ver a imagem, `GET /produto-img/{foto}` com a mesma chave).
 
 Ocorrências com `origem: "ml"` vêm da reclamação do Mercado Livre e têm `prazo_em` (limite para responder). O detalhe traz o objeto `ml`: `claim` (tipo, etapa, motivo, ações disponíveis), `mensagens` (quem escreveu, texto, data), `destinatario` (`complainant` = comprador, `mediator` = mediador quando em disputa) e `encerrada`. Para essas ocorrências o e-mail ao cliente não existe; a resposta é `POST …/ml/mensagem`. Reclamação encerrada devolve 409. A chave IA **não** conecta nem desconecta o Mercado Livre.
 

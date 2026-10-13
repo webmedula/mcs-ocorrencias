@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.4.0 — painel interno
+// Central de Ocorrências v1.5.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -86,7 +86,8 @@
     corpo.replaceChildren();
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
-        h("td", {}, h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+        h("td", {}, o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
+          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -254,13 +255,14 @@
         !o.anonimizada && estado.eu.papel === "gerente" ? botaoLgpd(o, "anonimizar", "Anonimizar", "Remove nome, e-mail, telefone, relato e fotos, mas mantém a ocorrência para as estatísticas.") : null,
         estado.eu.papel === "gerente" ? botaoLgpd(o, "excluir", "Excluir tudo", "Apaga a ocorrência inteira, com histórico e fotos. Não dá para desfazer.") : null));
 
-    box.append(
+    const partes = [
       h("div", { class: "cab" }, h("h2", {}, o.protocolo), h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
       h("p", { class: "meta" }, `${m.canais[o.canal] || o.canal} · pedido ${o.pedido} · ${m.tipos[o.tipo] || o.tipo}`),
       ehMl
         ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
         : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
       ...(ehMl ? [blocoMl(o)] : []),
+      blocoProdutos(o),
       tiny,
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
@@ -268,7 +270,8 @@
       o.anonimizada ? h("p", { class: "faixa neutro" }, "Dados pessoais removidos: não é possível responder o cliente.") : null,
       formNota, o.anonimizada ? null : ehMl ? formMl(o) : formResp,
       h("h3", {}, "Histórico"), hist, lgpd,
-    );
+    ];
+    box.append(...partes.flat(Infinity).filter((x) => x != null && x !== false));
   }
 
   const ROTULO_REM = { complainant: "Comprador", respondent: "Vendedor", mediator: "Mediador do ML" };
@@ -286,6 +289,21 @@
     return h("div", { class: "faixa ml-info" },
       h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
       acoes.length ? h("p", { class: "aviso" }, "Ações disponíveis no ML: " + acoes.join(", ") + ".") : null);
+  }
+
+  const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
+  function blocoProdutos(o) {
+    if (!o.produtos || !o.produtos.length) return null;
+    return h("div", { class: "produtos" }, h("h3", {}, o.produtos.length > 1 ? "Produtos do pedido" : "Produto do pedido"),
+      o.produtos.map((p) => {
+        const url = p.foto ? "/api/admin/produto-img/" + p.foto : null;
+        const det = [p.sku ? `SKU ${p.sku}` : null, p.variacao, p.qtd ? `${p.qtd} un.` : null, moeda(p.preco)].filter(Boolean).join(" · ");
+        return h("div", { class: "produto" },
+          url ? h("a", { href: url, target: "_blank", rel: "noopener", "aria-label": "Ver a foto do produto em tamanho maior" },
+            h("img", { src: url, alt: p.titulo ? `Foto do produto: ${p.titulo}` : "Foto do produto", width: "96", height: "96", loading: "lazy" })) : h("div", { class: "sem-foto", "aria-hidden": "true" }, "sem foto"),
+          h("div", {}, h("strong", {}, p.titulo || "Produto"), det ? h("small", {}, det) : null,
+            p.permalink ? h("a", { href: p.permalink, target: "_blank", rel: "noopener" }, "Ver anúncio no Mercado Livre") : null));
+      }));
   }
 
   function formMl(o) {

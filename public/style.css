@@ -216,3 +216,7 @@ footer { max-width: 1160px; margin: 0 auto; padding: 8px 24px 40px; display: fle
 .estreito-ok { max-width: 640px; margin: 0 auto; }
 .canais { margin-bottom: 18px; }
 .card.simples label:first-of-type { margin-top: 0; }
+
+/* v1.4.1 — link da política no rodapé */
+footer .link-rodape { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+footer .link-rodape:hover { color: #a83300; }

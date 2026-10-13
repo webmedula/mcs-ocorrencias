@@ -90,6 +90,7 @@ if (!colunasOc.includes("origem")) db.exec("ALTER TABLE ocorrencias ADD COLUMN o
 if (!colunasOc.includes("ml_claim_id")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_claim_id TEXT");
 if (!colunasOc.includes("ml_json")) db.exec("ALTER TABLE ocorrencias ADD COLUMN ml_json TEXT");
 if (!colunasOc.includes("anonimizada")) db.exec("ALTER TABLE ocorrencias ADD COLUMN anonimizada INTEGER NOT NULL DEFAULT 0");
+if (!colunasOc.includes("produto_json")) db.exec("ALTER TABLE ocorrencias ADD COLUMN produto_json TEXT");
 if (!colunasOc.includes("prazo_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN prazo_em TEXT");
 db.exec(`
 CREATE UNIQUE INDEX IF NOT EXISTS idx_oc_claim ON ocorrencias(ml_claim_id) WHERE ml_claim_id IS NOT NULL;

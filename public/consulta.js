@@ -8,6 +8,7 @@
     document.title = "Consultar protocolo — " + cfg.marca;
     $("#marca").textContent = cfg.marca;
     $("#rodape").textContent = cfg.marca + " · v" + cfg.versao;
+    if (cfg.privacidadeUrl) for (const l of document.querySelectorAll(".link-rodape")) l.href = cfg.privacidadeUrl;
     if (cfg.emailSuporte) $("#suporte").textContent = "Dúvidas? " + cfg.emailSuporte;
   } catch {}
 

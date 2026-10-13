@@ -1,4 +1,4 @@
-# Central de Ocorrências — v1.4.0
+# Central de Ocorrências — v1.5.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
@@ -120,3 +120,7 @@ Tabelas extras: `redefinicoes`, `modelos`, `alertas_prazo`, `rotinas_estado`.
 - Minha conta: aviso por e-mail de ocorrência nova e prazos.
 
 Tabelas extras: `registro`, `ml_ignorados`; colunas `ocorrencias.anonimizada` e `usuarios.avisar_email`.
+
+## Novidades da v1.5.0
+
+Reclamações do Mercado Livre mostram a foto, o título, o SKU e o link do anúncio do produto comprado (e uma miniatura na lista). As fotos ficam em `/data/produtos`. Sem variável nova.

@@ -28,6 +28,7 @@
     }
     if (cfg.privacidadeUrl) {
       const a = $("#link-privacidade"); a.href = cfg.privacidadeUrl; a.classList.remove("oculto");
+      for (const l of document.querySelectorAll(".link-rodape")) l.href = cfg.privacidadeUrl;
     }
     // Pré-seleção opcional via QR code: ?canal=shopee
     const qs = new URLSearchParams(location.search);

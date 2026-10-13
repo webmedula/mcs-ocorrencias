@@ -1,4 +1,4 @@
-# Deploy no Easypanel — Central de Ocorrências v1.4.0
+# Deploy no Easypanel — Central de Ocorrências v1.5.0
 
 Alvo: VPS da MCS, projeto **mcs** do Easypanel, endereço **https://atendimento.mcs.ind.br**
 (o DNS `*.mcs.ind.br` já aponta para o VPS, então não é preciso criar registro).
@@ -127,3 +127,7 @@ Não há passo obrigatório: é só subir a versão e implantar. O que muda para
 2. `RETENCAO_MESES` é opcional: com `24`, por exemplo, as ocorrências resolvidas há mais de 24 meses têm os dados pessoais removidos automaticamente. Deixe `0` se ainda não decidiu o prazo.
 3. Cada pessoa da equipe liga o aviso por e-mail em **Minha conta**.
 4. Pedido de um cliente para apagar os dados: abra a ocorrência e use **Anonimizar** ou **Excluir tudo** (só gerente).
+
+## Novidades da v1.5.0
+
+Nada para configurar: é só implantar. As reclamações do Mercado Livre passam a mostrar a foto do produto (as fotos ficam no volume, em `/data/produtos`).

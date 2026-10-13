@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.5.0 — 2026-10-13
+
+Foto e dados do produto nas reclamações do Mercado Livre.
+
+- Cada reclamação do Mercado Livre mostra o **produto comprado**: foto (da variação, se houver), título, SKU, variação, quantidade, preço e link do anúncio. A foto é baixada uma vez e guardada em `/data/produtos`, então continua aparecendo mesmo se o anúncio mudar.
+- **Miniatura** do produto ao lado de cada reclamação na lista, para reconhecer de relance.
+- Reclamações já importadas antes desta versão ganham o produto na próxima sincronização (a cada 3 min).
+- O Gerente IA recebe a lista `produtos` no detalhe da ocorrência (título, SKU, quantidade, variação, link).
+- Inclui o link da política de privacidade em todas as páginas (v1.4.1).
+- Correção: um "null" solto podia aparecer no detalhe da ocorrência.
+- Pedidos de Shopee, TikTok Shop e loja própria ainda não têm foto: dependem da integração com o Tiny (`TINY_TOKEN`), prevista para uma próxima versão.
+
+## v1.4.1 — 2026-10-13
+
+- **Link da política de privacidade** agora aparece em todas as páginas: no rodapé da página principal, da consulta de protocolo e do painel, além do texto ao lado da caixa de consentimento (que passou a aparecer sempre, sem depender de variável).
+
 ## v1.4.0 — 2026-10-12
 
 Privacidade (LGPD), registro de acessos e aviso por e-mail à equipe.
