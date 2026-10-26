@@ -28,6 +28,22 @@
         <div class="resumo"><b id="r-protocolo"></b><span class="status" id="status"></span></div>
         <p class="aviso" id="r-meta"></p>
         <ul class="hist" id="hist"></ul>
+
+        <form id="f-msg" class="msg-cliente oculto" novalidate>
+          <h2>Enviar mensagem</h2>
+          <p class="aviso">Responda a nossa equipe ou mande mais fotos. Vamos receber na hora.</p>
+          <div id="msg-erro" class="erro-geral oculto" role="alert"></div>
+          <p id="msg-ok" class="ok-msg oculto" role="status"></p>
+          <label for="msg-texto">Mensagem</label>
+          <textarea id="msg-texto" maxlength="3000" required></textarea>
+          <label class="drop" for="msg-fotos">
+            <strong>Anexar fotos</strong>
+            <span class="dica">Opcional · até 5 fotos · JPG, PNG ou WebP · 5 MB cada</span>
+            <input type="file" id="msg-fotos" accept="image/jpeg,image/png,image/webp" multiple>
+          </label>
+          <div class="fotos" id="msg-previa"></div>
+          <button type="submit" id="msg-enviar" class="primario">Enviar mensagem</button>
+        </form>
       </section>
     </div>
   </main>

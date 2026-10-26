@@ -131,3 +131,12 @@ Não há passo obrigatório: é só subir a versão e implantar. O que muda para
 ## Novidades da v1.5.0
 
 Nada para configurar: é só implantar. As reclamações do Mercado Livre passam a mostrar a foto do produto (as fotos ficam no volume, em `/data/produtos`).
+
+## Novidades da v1.6.0
+
+Funciona sem configurar nada: é só implantar. O banco ganha as colunas novas sozinho na primeira inicialização.
+
+1. **Pesquisa de satisfação** já vem ligada: o cliente do formulário recebe o e-mail 2 horas depois de a ocorrência ser marcada como resolvida (só as resolvidas a partir desta versão). Para mudar, defina `PESQUISA_HORAS` (ex.: `24`) ou desligue com `PESQUISA_SATISFACAO=false`. Precisa do SMTP configurado.
+2. Na consulta do protocolo o cliente agora pode **responder e mandar fotos**. O aviso chega no Telegram e, para quem ligou em Minha conta, por e-mail.
+3. Ao resolver uma ocorrência, registre o **desfecho** e o **custo** no detalhe: é o que alimenta os gráficos novos da aba Números.
+4. O botão **Exportar CSV** fica ao lado dos filtros da lista. Cada exportação fica no Registro de atividades.

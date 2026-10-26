@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.5.0 — painel interno
+// Central de Ocorrências v1.6.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -209,8 +209,7 @@
 
     const hist = h("ul", { class: "hist-p" }, [...o.eventos].reverse().map((e) => {
       const interna = !e.publico;
-      const doCliente = !e.autor;
-      const rotulo = interna ? ["Nota interna", ""] : doCliente ? ["Sistema", "sis"] : ["Cliente vê", "pub"];
+      const rotulo = e.do_cliente ? ["Cliente escreveu", "cli"] : interna ? ["Nota interna", ""] : !e.autor ? ["Sistema", "sis"] : ["Cliente vê", "pub"];
       return h("li", {},
         h("span", { class: "tipo " + rotulo[1] }, rotulo[0]), e.texto,
         h("div", {}, h("time", {}, fmt(e.criado_em)), e.autor ? h("span", { class: "autor" }, ` · ${e.autor}`) : null));
@@ -268,11 +267,50 @@
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
       h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
+      blocoDesfecho(o),
+      blocoPesquisa(o),
       o.anonimizada ? h("p", { class: "faixa neutro" }, "Dados pessoais removidos: não é possível responder o cliente.") : null,
       formNota, o.anonimizada ? null : ehMl ? formMl(o) : formResp,
       h("h3", {}, "Histórico"), hist, lgpd,
     ];
     box.append(...partes.flat(Infinity).filter((x) => x != null && x !== false));
+  }
+
+  // Desfecho e custo da resolução
+  function blocoDesfecho(o) {
+    const desfechos = estado.meta?.desfechos || {};
+    const sel = h("select", { id: "d-desfecho" }, h("option", { value: "" }, "Não registrado"),
+      Object.entries(desfechos).map(([k, v]) => h("option", { value: k, selected: k === o.desfecho }, v)));
+    const custo = h("input", { type: "text", id: "d-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off",
+      value: o.custo_centavos != null ? (o.custo_centavos / 100).toFixed(2).replace(".", ",") : "" });
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    const f = h("form", { class: "acao desfecho", novalidate: true },
+      h("div", { class: "campos-desfecho" },
+        h("div", {}, h("label", { for: "d-desfecho" }, "Desfecho"), sel),
+        h("div", {}, h("label", { for: "d-custo" }, "Custo para a empresa ", h("span", { class: "dica" }, "(R$, opcional)")), custo)),
+      msg, h("button", { type: "submit", class: "sec mini" }, "Salvar desfecho"));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const txt = custo.value.trim().replace(/\s|R\$/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+      const valor = txt === "" ? null : Number(txt);
+      if (valor != null && (!Number.isFinite(valor) || valor < 0)) { msg.textContent = "Custo inválido. Use, por exemplo, 49,90."; mostrar(msg, true); return; }
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/desfecho`, { desfecho: sel.value || null, custo: valor });
+      if (r.ok) await selecionar(o.protocolo, false);
+      else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
+    });
+    const lembrete = o.status === "resolvida" && !o.desfecho
+      ? h("div", { class: "faixa aviso-f" }, "Resolvida sem desfecho: registre como foi resolvida para aparecer nos Números.") : null;
+    return [lembrete, f];
+  }
+
+  function estrelas(n) { return "★".repeat(n) + "☆".repeat(5 - n); }
+  function blocoPesquisa(o) {
+    const p = o.pesquisa;
+    if (!p) return null;
+    if (p.nota == null) return h("div", { class: "faixa neutro" }, `Pesquisa de satisfação enviada em ${fmt(p.enviada_em)}. Ainda sem resposta.`);
+    return h("div", { class: "faixa " + (p.nota >= 4 ? "ok" : p.nota <= 2 ? "aviso-f" : "neutro") + " pesquisa" },
+      h("span", {}, h("strong", {}, `Satisfação: ${estrelas(p.nota)} ${p.nota}/5`), ` · respondida em ${fmt(p.respondida_em)}`,
+        p.comentario ? h("q", {}, p.comentario) : null));
   }
 
   const ROTULO_REM = { complainant: "Comprador", respondent: "Vendedor", mediator: "Mediador do ML" };
@@ -426,7 +464,9 @@
     const d = r.json, box = $("#n-kpis");
     box.replaceChildren();
     for (const [rot, val, cls] of [["Em aberto agora", d.abertas, "nova"], ["Recebidas no período", d.total, "em_analise"], ["Resolvidas", d.resolvidas, "resolvida"],
-      ["Tempo até a 1ª resposta", horas(d.horasPrimeiraResposta), "aguardando_cliente"]])
+      ["Tempo até a 1ª resposta", horas(d.horasPrimeiraResposta), "aguardando_cliente"], ["Tempo até resolver", horas(d.horasResolucao), "em_analise"],
+      ["Custo das resolvidas", moeda(d.custoTotal) || "R$ 0,00", "nova"],
+      ["Satisfação média", d.satisfacao.media == null ? "—" : `${d.satisfacao.media.toLocaleString("pt-BR")} / 5`, "resolvida"]])
       box.append(h("div", { class: "kpi " + cls }, rot, h("b", {}, String(val))));
     // Sempre as últimas 8 semanas (segunda-feira de cada uma), mesmo as vazias
     const hoje = new Date(); hoje.setUTCHours(0, 0, 0, 0);
@@ -440,6 +480,16 @@
     barras($("#g-canal"), d.porCanal.map((x) => ({ rotulo: d.canais[x.k] || x.k, n: x.n })));
     barras($("#g-tipo"), d.porTipo.map((x) => ({ rotulo: d.tipos[x.k] || x.k, n: x.n })));
     barras($("#g-origem"), d.porOrigem.map((x) => ({ rotulo: x.k === "ml" ? "Mercado Livre (reclamações)" : "Formulário do site", n: x.n })));
+    barras($("#g-desfecho"), d.porDesfecho.map((x) => ({ rotulo: x.k === "sem_registro" ? "Não registrado" : d.desfechos[x.k] || x.k, n: x.n })));
+    $("#desfecho-custo").textContent = d.porDesfecho.some((x) => x.custo > 0)
+      ? "Custo por desfecho: " + d.porDesfecho.filter((x) => x.custo > 0).map((x) => `${x.k === "sem_registro" ? "Não registrado" : d.desfechos[x.k] || x.k} ${moeda(x.custo)}`).join(" · ")
+      : "Nenhum custo registrado no período.";
+    const s = d.satisfacao;
+    if (s.respostas) barras($("#g-satisfacao"), [5, 4, 3, 2, 1].map((n) => ({ rotulo: estrelas(n), n: (d.porNota || []).find((x) => x.k === n)?.n ?? 0 })));
+    else $("#g-satisfacao").replaceChildren();
+    $("#satisfacao-info").textContent = s.enviadas || s.respostas
+      ? `${s.respostas} resposta(s) de ${s.enviadas} pesquisa(s) enviada(s) no período${s.respostas ? ` · ${Math.round((s.boas / s.respostas) * 100)}% deram 4 ou 5` : ""}.`
+      : "Nenhuma pesquisa enviada no período. Elas saem por e-mail algumas horas depois de a ocorrência ser resolvida.";
   }
 
   // ---------- modelos, QR e backup (equipe) ----------
@@ -490,7 +540,7 @@
   const ROT_REG = { login_ok: "Entrou", login_falha: "Senha errada", login_novo_ip: "Entrou de IP novo", alerta_falhas: "Alerta: várias senhas erradas",
     redefinicao_pedida: "Pediu nova senha", senha_redefinida: "Nova senha por e-mail", senha_alterada: "Trocou a senha", usuario_criado: "Criou usuário",
     usuario_alterado: "Alterou usuário", chave_criada: "Criou chave da IA", chave_revogada: "Revogou chave da IA", dados_exportados: "Baixou dados do titular",
-    ocorrencia_anonimizada: "Anonimizou ocorrência", ocorrencia_excluida: "Excluiu ocorrência" };
+    ocorrencia_anonimizada: "Anonimizou ocorrência", ocorrencia_excluida: "Excluiu ocorrência", lista_exportada: "Exportou a lista (CSV)" };
   async function carregarRegistro() {
     const r = await api("GET", "/registro?so=" + encodeURIComponent($("#reg-filtro").value));
     const corpo = $("#registro");
@@ -568,6 +618,10 @@
   $("#f-canal").addEventListener("change", (e) => { estado.filtro.canal = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-origem").addEventListener("change", (e) => { estado.filtro.origem = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-status").addEventListener("change", (e) => { estado.filtro.status = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
+  $("#exportar-csv").addEventListener("click", () => {
+    const f = estado.filtro;
+    window.location.assign("/api/admin/ocorrencias.csv?" + new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem }));
+  });
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });
 

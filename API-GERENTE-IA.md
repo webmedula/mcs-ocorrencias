@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.5.0
+# API do Gerente IA — Central de Ocorrências v1.6.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -18,6 +18,7 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Listar / buscar ocorrências | `GET /ocorrencias?q=&canal=&status=&origem=&pagina=` (`origem=ml` ou `formulario`) | sim |
 | Ler uma ocorrência (relato, dados do Tiny, histórico) | `GET /ocorrencias/{protocolo}` | sim |
 | Mudar status | `PATCH /ocorrencias/{protocolo}/status` `{"status":"em_analise"}` | sim |
+| Registrar desfecho e custo (v1.6.0) | `PATCH /ocorrencias/{protocolo}/desfecho` `{"desfecho":"reenvio","custo":49.9}` (`custo` em reais, opcional; `desfecho: null` apaga) | sim |
 | Anotar (nota interna, o cliente não vê) | `POST /ocorrencias/{protocolo}/notas` `{"texto":"…"}` | sim |
 | **Responder o comprador no Mercado Livre** | `POST /ocorrencias/{protocolo}/ml/mensagem` `{"texto":"…"}` (até 2000 caracteres; 20 por hora) | sim |
 | Ler modelos de resposta | `GET /modelos?protocolo={protocolo}` (traz `texto_pronto` já com nome, protocolo e pedido) | sim |
@@ -25,6 +26,7 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Baixar/anonimizar/excluir dados de uma ocorrência | `/ocorrencias/{protocolo}/exportar`, `/anonimizar`, `/excluir` | **não** |
 | Responder o cliente (envia e-mail) | `POST /ocorrencias/{protocolo}/resposta` | **não** |
 | Ver fotos | `GET /anexos/{id}` | **não** |
+| Exportar a lista em CSV | `GET /ocorrencias.csv` | **não** |
 | Números (contagens, tempos) | `GET /estatisticas?dias=7\|30\|90\|365` | sim |
 | Backups | `/backups` | **não** |
 | Registro de atividades | `GET /registro` | **não** |
@@ -39,6 +41,7 @@ O detalhe traz também `produtos`: lista com `titulo`, `sku`, `variacao`, `qtd`,
 Ocorrências com `origem: "ml"` vêm da reclamação do Mercado Livre e têm `prazo_em` (limite para responder). O detalhe traz o objeto `ml`: `claim` (tipo, etapa, motivo, ações disponíveis), `mensagens` (quem escreveu, texto, data), `destinatario` (`complainant` = comprador, `mediator` = mediador quando em disputa) e `encerrada`. Para essas ocorrências o e-mail ao cliente não existe; a resposta é `POST …/ml/mensagem`. Reclamação encerrada devolve 409. A chave IA **não** conecta nem desconecta o Mercado Livre.
 
 Valores de `status`: `nova`, `em_analise`, `aguardando_cliente`, `resolvida`.
+Valores de `desfecho`: `reembolso_total`, `reembolso_parcial`, `reenvio`, `troca`, `devolucao`, `cupom`, `orientacao`, `sem_acao`.
 Valores de `canal`: `mercado_livre`, `shopee`, `tiktok_shop`, `loja_propria`.
 
 A mudança de status aparece para o cliente na consulta ("Status atualizado: …"). Notas internas nunca aparecem.

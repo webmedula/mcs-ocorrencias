@@ -433,7 +433,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   }
   if (claim.status === "closed" && existente.status !== "resolvida") {
     db.transaction(() => {
-      db.prepare("UPDATE ocorrencias SET status = 'resolvida', prazo_em = NULL, atualizado_em = datetime('now') WHERE id = ?").run(existente.id);
+      db.prepare("UPDATE ocorrencias SET status = 'resolvida', resolvida_em = datetime('now'), prazo_em = NULL, atualizado_em = datetime('now') WHERE id = ?").run(existente.id);
       db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)")
         .run(existente.id, "Reclamação encerrada no Mercado Livre.", "Sistema");
     })();
@@ -482,7 +482,7 @@ function gravarMensagens(ocId: number, msgs: any[], avisar = false, oc?: any): n
   if (avisar && novasDoComprador.length && oc) {
     // Comprador respondeu: tira de "aguardando" e avisa
     if (oc.status === "aguardando_cliente" || oc.status === "resolvida") {
-      db.prepare("UPDATE ocorrencias SET status = 'em_analise' WHERE id = ?").run(ocId);
+      db.prepare("UPDATE ocorrencias SET status = 'em_analise', resolvida_em = NULL WHERE id = ?").run(ocId);
     }
     const ultimo = novasDoComprador[novasDoComprador.length - 1];
     void enviarTelegram(

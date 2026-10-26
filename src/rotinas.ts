@@ -4,8 +4,10 @@ import { config } from "./config.js";
 import { db } from "./db.js";
 import { avisarEquipeEmail, enviarTelegram, esc } from "./notify.js";
 import { aplicarRetencao } from "./lgpd.js";
+import { enviarPesquisasPendentes } from "./pesquisa.js";
 
-/** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco. */
+/** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco.
+ *  v1.6.0: pesquisa de satisfação das ocorrências resolvidas. */
 
 export const pastaBackups = path.join(config.dataDir, "backups");
 
@@ -137,6 +139,7 @@ async function ciclo(): Promise<void> {
     await alertarPrazos();
     await resumoSeChegouAHora();
     await backupSeFaltar();
+    await enviarPesquisasPendentes();
     aplicarRetencao();
   } catch (e: any) {
     console.error("[rotinas]", e?.message);

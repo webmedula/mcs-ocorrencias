@@ -77,6 +77,8 @@ function getTransporter() {
   return transporter;
 }
 
+export const smtpLigado = () => Boolean(config.smtpHost);
+
 /** Extrai o endereço de "Nome <a@b.c>" ou "a@b.c". */
 export function enderecoDe(valor: string): string {
   const m = valor.match(/<([^>]+)>/);
@@ -170,7 +172,7 @@ export async function enviarResposta(o: { protocolo: string; nome: string; email
     <p>Olá, ${esc(o.nome)}. Temos uma atualização sobre o seu atendimento <b>${esc(o.protocolo)}</b>:</p>
     <div style="background:#fff3eb;border-left:4px solid #f55000;padding:12px 16px;border-radius:6px">${corpoHtml}</div>
     <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:bold">Ver o atendimento</a></p>
-    <p style="font-size:12px;color:#777">Você pode responder a este e-mail.</p>
+    <p style="font-size:12px;color:#777">Para responder ou enviar mais fotos, use o botão acima (informe o e-mail usado no registro). Você também pode responder a este e-mail.</p>
   </div>`;
   const t = getTransporter();
   if (!t) {
@@ -189,6 +191,35 @@ export async function enviarResposta(o: { protocolo: string; nome: string; email
   });
   console.log(`[mail] resposta ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)} · resposta="${info.response}"`);
   return info.accepted.length > 0;
+}
+
+/** Pesquisa de satisfação: cinco botões, cada um abre /avaliar.html já com a nota. Lança em caso de falha. */
+export async function enviarPesquisa(o: { protocolo: string; nome: string; email: string }, link: string): Promise<void> {
+  const t = getTransporter();
+  if (!t) return;
+  const ROTULOS = ["Muito ruim", "Ruim", "Regular", "Bom", "Ótimo"];
+  const botoes = ROTULOS.map((r, i) =>
+    `<a href="${esc(link)}&amp;nota=${i + 1}" style="display:inline-block;margin:3px;padding:10px 12px;border-radius:10px;border:1.5px solid #f55000;color:#a83300;font-weight:bold;text-decoration:none">${i + 1} · ${r}</a>`,
+  ).join("");
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
+    <h2 style="margin-bottom:4px">${esc(config.brandName)}</h2>
+    <p>Olá, ${esc(o.nome)}. O seu atendimento <b>${esc(o.protocolo)}</b> foi concluído.</p>
+    <p>Como você avalia o atendimento que recebeu? É só um clique.</p>
+    <p>${botoes}</p>
+    <p style="font-size:12px;color:#777">Sua resposta nos ajuda a melhorar. O link vale por 30 dias.</p>
+  </div>`;
+  const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
+  const info = await t.sendMail({
+    from: config.mailFrom,
+    ...(config.supportEmail.includes("@") ? { replyTo: config.supportEmail } : {}),
+    envelope: { from: envelopeFrom, to: o.email },
+    to: o.email,
+    subject: `Protocolo ${o.protocolo} — como foi o seu atendimento?`,
+    html,
+    text: `O seu atendimento ${o.protocolo} foi concluído. Avalie de 1 a 5 em: ${link}`,
+  });
+  console.log(`[mail] pesquisa ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)}`);
 }
 
 /** Aviso genérico no Telegram (HTML). Nunca lança: erros vão para o log. */
