@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.6.0
+# Central de Ocorrências — v1.7.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.6.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.7.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -135,3 +135,10 @@ Reclamações do Mercado Livre mostram a foto, o título, o SKU e o link do anú
 - **Testes automáticos** (`npm test`), rodados no GitHub antes de publicar a imagem.
 
 Tabela extra: `pesquisas`; colunas `ocorrencias.desfecho`, `ocorrencias.custo_centavos`, `ocorrencias.resolvida_em` e `eventos.do_cliente`.
+
+## Novidades da v1.7.0
+
+- **Produto e foto pelo Tiny** nas ocorrências do formulário (Shopee, TikTok Shop, loja própria e Mercado Livre pelo site): quando o pedido é encontrado no Tiny, a Central lê os itens (`pedido.obter`) e a imagem do cadastro do produto (`produto.obter`; variação sem foto usa a do produto pai). As fotos ficam em `/data/produtos`, como as do Mercado Livre. Ocorrências antigas são completadas aos poucos pela rotina (3 a cada 10 min). Precisa de `TINY_TOKEN`.
+- **Responsável pela ocorrência**: seletor e botão "Assumir" no detalhe, nome do responsável na lista, filtro "Minhas", "Sem responsável" ou por pessoa, coluna no CSV. Quem responde o cliente primeiro vira responsável se ninguém tinha assumido. Quem recebe uma ocorrência de outra pessoa ganha um e-mail (se ligou os avisos em Minha conta).
+
+Coluna nova: `ocorrencias.responsavel_id`.

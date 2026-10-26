@@ -4,12 +4,13 @@ import path from "node:path";
 import { z } from "zod";
 import { CANAIS, DESFECHOS, STATUS, TIPOS, config, type Desfecho, type Status } from "./config.js";
 import { dataLocal, gerarCsv, reais } from "./csv.js";
+import { pastaProdutos } from "./produtos.js";
 import { db } from "./db.js";
 import {
   conferirSenha, criarSessao, encerrarSessao, exigirLogin, gastarTempo, gerarChave, hashSenha,
-  identificar, nomeDoAtor, senhaForte, soGerente, soPessoas,
+  identificar, nomeDoAtor, senhaForte, soGerente, soPessoas, type Ator,
 } from "./auth.js";
-import { enviarRedefinicao, enviarResposta } from "./notify.js";
+import { avisarPessoaEmail, enviarRedefinicao, enviarResposta } from "./notify.js";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -17,7 +18,7 @@ import QRCode from "qrcode";
 import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
 import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
-import { pastaProdutos, MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
 export const admin = express.Router();
@@ -59,7 +60,7 @@ admin.post("/login", limiteLogin, (req, res) => {
   registrar("login_ok", { usuarioId: u.id, email: u.email, req });
   db.prepare("UPDATE usuarios SET ultimo_login = datetime('now') WHERE id = ?").run(u.id);
   criarSessao(res, u.id);
-  res.json({ nome: u.nome, email: u.email, papel: u.papel });
+  res.json({ id: u.id, nome: u.nome, email: u.email, papel: u.papel });
 });
 
 admin.post("/logout", (req, res) => {
@@ -72,7 +73,7 @@ admin.get("/me", (req, res) => {
   if (!a) return res.status(401).json({ erro: "Não autenticado." });
   if (a.tipo !== "usuario") return res.json({ tipo: "ia", nome: a.nome });
   const av = db.prepare("SELECT avisar_email FROM usuarios WHERE id = ?").get(a.id) as { avisar_email: number } | undefined;
-  res.json({ tipo: "usuario", nome: a.nome, email: a.email, papel: a.papel, avisarEmail: Boolean(av?.avisar_email) });
+  res.json({ tipo: "usuario", id: a.id, nome: a.nome, email: a.email, papel: a.papel, avisarEmail: Boolean(av?.avisar_email) });
 });
 
 // Tudo abaixo exige estar logado (pessoa ou chave do Gerente IA)
@@ -141,8 +142,9 @@ admin.get("/produto-img/:arquivo", (req, res) => {
 });
 
 // Filtros da lista (também usados na exportação em CSV)
-function filtroLista(query: express.Request["query"]) {
+function filtroLista(query: express.Request["query"], ator: Ator) {
   const q = String(query.q ?? "").trim().slice(0, 80);
+  const responsavel = String(query.responsavel ?? "");
   const canal = String(query.canal ?? "");
   const status = String(query.status ?? "");
   const origem = String(query.origem ?? "");
@@ -151,6 +153,10 @@ function filtroLista(query: express.Request["query"]) {
   if (canal in CANAIS) { where.push("canal = ?"); args.push(canal); }
   if (status in STATUS) { where.push("status = ?"); args.push(status); }
   if (origem === "ml" || origem === "formulario") { where.push("origem = ?"); args.push(origem); }
+  // Responsável: "eu" (quem está logado), "nenhum" ou o id de alguém da equipe
+  if (responsavel === "eu" && ator.tipo === "usuario") { where.push("responsavel_id = ?"); args.push(ator.id); }
+  else if (responsavel === "nenhum") where.push("responsavel_id IS NULL");
+  else if (/^\d{1,9}$/.test(responsavel)) { where.push("responsavel_id = ?"); args.push(Number(responsavel)); }
   if (q) {
     const like = `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`;
     where.push("(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')");
@@ -162,11 +168,12 @@ function filtroLista(query: express.Request["query"]) {
 admin.get("/ocorrencias", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = 25;
-  const { cond, args } = filtroLista(req.query);
+  const { cond, args } = filtroLista(req.query, req.ator!);
   const total = (db.prepare(`SELECT COUNT(*) AS n FROM ocorrencias ${cond}`).get(...args) as { n: number }).n;
   const itens = db
     .prepare(
       `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em, produto_json,
+              responsavel_id, (SELECT u.nome FROM usuarios u WHERE u.id = o.responsavel_id) AS responsavel,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos
        FROM ocorrencias o ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ? OFFSET ?`,
     )
@@ -179,28 +186,31 @@ admin.get("/ocorrencias", (req, res) => {
   const contagem: Record<string, number> = Object.fromEntries(statusKeys.map((k) => [k, 0]));
   for (const r of db.prepare("SELECT status, COUNT(*) AS n FROM ocorrencias GROUP BY status").all() as { status: string; n: number }[])
     contagem[r.status] = r.n;
-  res.json({ itens, total, pagina, porPagina, contagem, canais: CANAIS, tipos: TIPOS, status: STATUS, desfechos: DESFECHOS });
+    // Quem pode ser responsável (pessoas ativas), para os filtros e o seletor do detalhe
+  const equipe = db.prepare("SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome").all();
+  res.json({ itens, total, pagina, porPagina, contagem, canais: CANAIS, tipos: TIPOS, status: STATUS, desfechos: DESFECHOS, equipe });
 });
 
 // Exportação da lista em CSV, com os mesmos filtros (v1.6.0). Tem dados pessoais: só pessoas, e fica no registro.
 const LIMITE_CSV = 20000;
 admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
-  const { cond, args } = filtroLista(req.query);
+  const { cond, args } = filtroLista(req.query, req.ator!);
   const linhas = db
     .prepare(
       `SELECT o.protocolo, o.criado_em, o.origem, o.canal, o.pedido, o.tipo, o.status, o.nome, o.email, o.telefone,
               o.desfecho, o.custo_centavos, o.resolvida_em, o.prazo_em, o.tiny_status, o.atualizado_em,
+              (SELECT u.nome FROM usuarios u WHERE u.id = o.responsavel_id) AS responsavel,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos, p.nota
        FROM ocorrencias o LEFT JOIN pesquisas p ON p.ocorrencia_id = o.id
        ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ?`,
     )
     .all(...args, LIMITE_CSV) as any[];
   const csv = gerarCsv(
-    ["Protocolo", "Aberta em", "Origem", "Canal", "Pedido", "Assunto", "Status", "Cliente", "E-mail", "Telefone", "Fotos",
+    ["Protocolo", "Aberta em", "Origem", "Canal", "Pedido", "Assunto", "Status", "Responsável", "Cliente", "E-mail", "Telefone", "Fotos",
       "Desfecho", "Custo (R$)", "Resolvida em", "Prazo ML", "Nota (1-5)", "Tiny", "Atualizada em"],
     linhas.map((o) => [
       o.protocolo, dataLocal(o.criado_em), o.origem === "ml" ? "Mercado Livre (reclamação)" : "Formulário", CANAIS[o.canal as keyof typeof CANAIS] ?? o.canal,
-      o.pedido, TIPOS[o.tipo as keyof typeof TIPOS] ?? o.tipo, STATUS[o.status as Status] ?? o.status, o.nome, o.email, o.telefone, o.fotos,
+      o.pedido, TIPOS[o.tipo as keyof typeof TIPOS] ?? o.tipo, STATUS[o.status as Status] ?? o.status, o.responsavel, o.nome, o.email, o.telefone, o.fotos,
       o.desfecho ? DESFECHOS[o.desfecho as Desfecho] ?? o.desfecho : "", reais(o.custo_centavos), dataLocal(o.resolvida_em), dataLocal(o.prazo_em),
       o.nota ?? "", o.tiny_status, dataLocal(o.atualizado_em),
     ]),
@@ -222,6 +232,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
   try { tiny = o.tiny_json ? JSON.parse(o.tiny_json) : null; } catch { /* ignora */ }
   const { ip_hash: _ip, tiny_json: _t, ml_json: mlJson, produto_json: pj, ...resto } = o;
   const pesquisa = db.prepare("SELECT enviada_em, nota, comentario, respondida_em FROM pesquisas WHERE ocorrencia_id = ?").get(o.id) ?? null;
+  const responsavel = o.responsavel_id ? db.prepare("SELECT id, nome FROM usuarios WHERE id = ?").get(o.responsavel_id) ?? null : null;
   let ml: unknown = null;
   if (o.origem === "ml") {
     let claim: any = null;
@@ -231,7 +242,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -278,6 +289,39 @@ admin.patch("/ocorrencias/:protocolo/desfecho", (req, res) => {
   res.json({ desfecho: p.data.desfecho, custo: centavos == null ? null : centavos / 100 });
 });
 
+// Responsável pela ocorrência (v1.7.0). Pessoas e Gerente IA; null tira o responsável.
+admin.patch("/ocorrencias/:protocolo/responsavel", async (req, res) => {
+  const p = z.object({ usuarioId: z.number({ invalid_type_error: "Responsável inválido." }).int().positive().nullable() }).safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  const novo = p.data.usuarioId == null ? null
+    : db.prepare("SELECT id, nome, email, avisar_email FROM usuarios WHERE id = ? AND ativo = 1").get(p.data.usuarioId) as
+      { id: number; nome: string; email: string; avisar_email: number } | undefined;
+  if (p.data.usuarioId != null && !novo) return res.status(400).json({ erro: "Essa pessoa não existe ou está desativada." });
+  if ((o.responsavel_id ?? null) === (novo?.id ?? null)) return res.json({ responsavel: novo ? { id: novo.id, nome: novo.nome } : null });
+  definirResponsavel(o.id, novo ?? null, req.ator!);
+  // Avisa quem recebeu, se foi outra pessoa que atribuiu e ela liga os avisos por e-mail
+  if (novo && novo.avisar_email && !(req.ator!.tipo === "usuario" && req.ator!.id === novo.id))
+    void avisarPessoaEmail(novo, `Ocorrência ${o.protocolo} atribuída a você`,
+      [`${nomeDoAtor(req.ator!)} colocou você como responsável.`, `Pedido ${o.pedido} · ${o.nome}`], o.protocolo);
+  res.json({ responsavel: novo ? { id: novo.id, nome: novo.nome } : null });
+});
+
+function definirResponsavel(ocorrenciaId: number, novo: { id: number; nome: string } | null, ator: Ator): void {
+  db.transaction(() => {
+    db.prepare("UPDATE ocorrencias SET responsavel_id = ?, atualizado_em = datetime('now') WHERE id = ?").run(novo?.id ?? null, ocorrenciaId);
+    db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)").run(
+      ocorrenciaId, novo ? `Responsável: ${novo.nome}.` : "Responsável removido.", nomeDoAtor(ator));
+  })();
+}
+
+/** Quem responde o cliente primeiro vira responsável, se ninguém tinha assumido. */
+function assumirSeLivre(o: { id: number; responsavel_id: number | null }, ator: Ator): void {
+  if (o.responsavel_id || ator.tipo !== "usuario") return;
+  definirResponsavel(o.id, { id: ator.id, nome: ator.nome }, ator);
+}
+
 const texto = z.object({ texto: z.string().trim().min(2, "Escreva o texto.").max(3000) });
 
 admin.post("/ocorrencias/:protocolo/notas", (req, res) => {
@@ -300,6 +344,7 @@ admin.post("/ocorrencias/:protocolo/resposta", soPessoas, async (req, res) => {
   if (o.origem === "ml") return res.status(400).json({ erro: "Reclamações do Mercado Livre são respondidas pela mensagem do próprio Mercado Livre." });
   db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,1,?)").run(o.id, p.data.texto, nomeDoAtor(req.ator!));
   db.prepare("UPDATE ocorrencias SET atualizado_em = datetime('now') WHERE id = ?").run(o.id);
+  assumirSeLivre(o, req.ator!);
   let emailEnviado = false;
   try {
     emailEnviado = await enviarResposta({ protocolo: o.protocolo, nome: o.nome, email: o.email }, p.data.texto);
@@ -352,6 +397,7 @@ admin.post("/ocorrencias/:protocolo/ml/mensagem", async (req, res) => {
       o.id, `Mensagem enviada no Mercado Livre (${r.destinatario === "mediator" ? "ao mediador" : "ao comprador"}).`, nomeDoAtor(a),
     );
     if (o.status === "nova") db.prepare("UPDATE ocorrencias SET status = 'em_analise' WHERE id = ?").run(o.id);
+    assumirSeLivre(o, a);
     res.status(201).json({ ok: true, destinatario: r.destinatario });
   } catch (e) {
     return erroMl(res, e);

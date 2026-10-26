@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.6.0
+# API do Gerente IA — Central de Ocorrências v1.7.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -15,7 +15,8 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 
 | Ação | Rota | Chave IA |
 |---|---|---|
-| Listar / buscar ocorrências | `GET /ocorrencias?q=&canal=&status=&origem=&pagina=` (`origem=ml` ou `formulario`) | sim |
+| Listar / buscar ocorrências | `GET /ocorrencias?q=&canal=&status=&origem=&responsavel=&pagina=` (`origem=ml` ou `formulario`; `responsavel=nenhum` ou o id da pessoa) | sim |
+| Definir o responsável (v1.7.0) | `PATCH /ocorrencias/{protocolo}/responsavel` `{"usuarioId":3}` (`null` tira; ids das pessoas em `equipe` da lista) | sim |
 | Ler uma ocorrência (relato, dados do Tiny, histórico) | `GET /ocorrencias/{protocolo}` | sim |
 | Mudar status | `PATCH /ocorrencias/{protocolo}/status` `{"status":"em_analise"}` | sim |
 | Registrar desfecho e custo (v1.6.0) | `PATCH /ocorrencias/{protocolo}/desfecho` `{"desfecho":"reenvio","custo":49.9}` (`custo` em reais, opcional; `desfecho: null` apaga) | sim |
@@ -36,7 +37,7 @@ Tudo que a chave faz fica no histórico com o autor **Gerente IA**.
 
 ### Reclamações do Mercado Livre
 
-O detalhe traz também `produtos`: lista com `titulo`, `sku`, `variacao`, `qtd`, `preco`, `permalink` (anúncio) e `foto` (arquivo guardado na Central; para ver a imagem, `GET /produto-img/{foto}` com a mesma chave).
+O detalhe traz também `produtos` (reclamações do Mercado Livre e, desde a v1.7.0, ocorrências do formulário com pedido encontrado no Tiny; nestas `permalink` é nulo): lista com `titulo`, `sku`, `variacao`, `qtd`, `preco`, `permalink` (anúncio) e `foto` (arquivo guardado na Central; para ver a imagem, `GET /produto-img/{foto}` com a mesma chave).
 
 Ocorrências com `origem: "ml"` vêm da reclamação do Mercado Livre e têm `prazo_em` (limite para responder). O detalhe traz o objeto `ml`: `claim` (tipo, etapa, motivo, ações disponíveis), `mensagens` (quem escreveu, texto, data), `destinatario` (`complainant` = comprador, `mediator` = mediador quando em disputa) e `encerrada`. Para essas ocorrências o e-mail ao cliente não existe; a resposta é `POST …/ml/mensagem`. Reclamação encerrada devolve 409. A chave IA **não** conecta nem desconecta o Mercado Livre.
 

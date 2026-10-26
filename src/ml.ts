@@ -1,11 +1,10 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { config, type Tipo } from "./config.js";
 import { db } from "./db.js";
 import { esc, enviarTelegram, avisarEquipeEmail } from "./notify.js";
 import { gerarProtocolo } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
+import { guardarFoto, type Produto } from "./produtos.js";
 
 // ---------- Erros ----------
 export class MlErro extends Error {
@@ -170,41 +169,13 @@ async function ml(caminho: string, init: { metodo?: string; corpo?: unknown } = 
 }
 
 // ---------- Produto do pedido (foto, título, SKU) ----------
-export interface ProdutoMl {
-  item_id: string | null; titulo: string | null; sku: string | null; qtd: number | null;
-  preco: number | null; permalink: string | null; foto: string | null; variacao: string | null;
-}
-export const pastaProdutos = path.join(config.dataDir, "produtos");
-const FOTO_MAX = 3 * 1024 * 1024;
+export type ProdutoMl = Produto;
 
 function hostConfiavel(u: URL): boolean {
   if (u.protocol !== "https:" && u.origin !== new URL(config.mlApiBase).origin) return false;
   return /(^|\.)mlstatic\.com$/i.test(u.hostname) || u.origin === new URL(config.mlApiBase).origin;
 }
-
-/** Baixa a foto uma vez e guarda no volume (continua valendo se o anúncio mudar). Devolve o nome do arquivo. */
-async function guardarFoto(url: string | null | undefined): Promise<string | null> {
-  if (!url) return null;
-  try {
-    const u = new URL(url.replace(/^http:\/\/(?=[^/]*mlstatic\.com)/i, "https://"));
-    if (!hostConfiavel(u)) return null;
-    const nomeBase = crypto.createHash("sha1").update(u.href).digest("hex").slice(0, 16);
-    fs.mkdirSync(pastaProdutos, { recursive: true });
-    for (const ext of ["jpg", "png", "webp"]) if (fs.existsSync(path.join(pastaProdutos, `${nomeBase}.${ext}`))) return `${nomeBase}.${ext}`;
-    const res = await fetch(u, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) return null;
-    const tipo = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-    const ext = tipo === "image/png" ? "png" : tipo === "image/webp" ? "webp" : tipo === "image/jpeg" ? "jpg" : null;
-    if (!ext) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.length === 0 || buf.length > FOTO_MAX) return null;
-    fs.writeFileSync(path.join(pastaProdutos, `${nomeBase}.${ext}`), buf);
-    return `${nomeBase}.${ext}`;
-  } catch (e: any) {
-    console.error(`[ml] foto do produto: ${e?.message}`);
-    return null;
-  }
-}
+const fotoMl = (url: string | undefined) => guardarFoto(url?.replace(/^http:\/\/(?=[^/]*mlstatic\.com)/i, "https://"), hostConfiavel);
 
 /** Itens do pedido com foto do anúncio (ou da variação comprada). Nunca lança. */
 export async function produtosDoPedido(pedido: any): Promise<ProdutoMl[]> {
@@ -232,7 +203,7 @@ export async function produtosDoPedido(pedido: any): Promise<ProdutoMl[]> {
       qtd: typeof oi.quantity === "number" ? oi.quantity : null,
       preco: typeof oi.unit_price === "number" ? oi.unit_price : null,
       permalink: anuncio?.permalink ?? null,
-      foto: await guardarFoto(url),
+      foto: await fotoMl(url),
       variacao: attrs || null,
     });
   }

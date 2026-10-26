@@ -267,11 +267,19 @@ export async function enviarRedefinicao(u: { nome: string; email: string }, link
 
 /** E-mail para quem ativou o aviso em "Minha conta". Nunca lança. */
 export async function avisarEquipeEmail(assunto: string, linhas: string[], protocolo?: string): Promise<void> {
+  const destinos = db.prepare("SELECT nome, email FROM usuarios WHERE ativo = 1 AND avisar_email = 1").all() as { nome: string; email: string }[];
+  await avisarEmail(destinos, assunto, linhas, protocolo);
+}
+
+/** O mesmo aviso, para uma pessoa só (ex.: ocorrência atribuída a ela). Nunca lança. */
+export async function avisarPessoaEmail(pessoa: { nome: string; email: string }, assunto: string, linhas: string[], protocolo?: string): Promise<void> {
+  await avisarEmail([pessoa], assunto, linhas, protocolo);
+}
+
+async function avisarEmail(destinos: { nome: string; email: string }[], assunto: string, linhas: string[], protocolo?: string): Promise<void> {
   try {
     const t = getTransporter();
-    if (!t) return;
-    const destinos = db.prepare("SELECT nome, email FROM usuarios WHERE ativo = 1 AND avisar_email = 1").all() as { nome: string; email: string }[];
-    if (!destinos.length) return;
+    if (!t || !destinos.length) return;
     const link = `${config.publicUrl}/painel${protocolo ? "#" + encodeURIComponent(protocolo) : ""}`;
     const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
       <h3 style="margin-bottom:6px">${esc(assunto)}</h3>

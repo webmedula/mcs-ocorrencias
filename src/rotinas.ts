@@ -5,9 +5,11 @@ import { db } from "./db.js";
 import { avisarEquipeEmail, enviarTelegram, esc } from "./notify.js";
 import { aplicarRetencao } from "./lgpd.js";
 import { enviarPesquisasPendentes } from "./pesquisa.js";
+import { completarPendentesTiny } from "./produtos.js";
 
 /** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco.
- *  v1.6.0: pesquisa de satisfação das ocorrências resolvidas. */
+ *  v1.6.0: pesquisa de satisfação das ocorrências resolvidas.
+ *  v1.7.0: produto e foto (Tiny) das ocorrências antigas do formulário. */
 
 export const pastaBackups = path.join(config.dataDir, "backups");
 
@@ -140,6 +142,7 @@ async function ciclo(): Promise<void> {
     await resumoSeChegouAHora();
     await backupSeFaltar();
     await enviarPesquisasPendentes();
+    await completarPendentesTiny();
     aplicarRetencao();
   } catch (e: any) {
     console.error("[rotinas]", e?.message);

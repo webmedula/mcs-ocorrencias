@@ -140,3 +140,10 @@ Funciona sem configurar nada: é só implantar. O banco ganha as colunas novas s
 2. Na consulta do protocolo o cliente agora pode **responder e mandar fotos**. O aviso chega no Telegram e, para quem ligou em Minha conta, por e-mail.
 3. Ao resolver uma ocorrência, registre o **desfecho** e o **custo** no detalhe: é o que alimenta os gráficos novos da aba Números.
 4. O botão **Exportar CSV** fica ao lado dos filtros da lista. Cada exportação fica no Registro de atividades.
+
+## Novidades da v1.7.0
+
+É só implantar; o banco ganha a coluna nova sozinho.
+
+1. **Produto e foto pelo Tiny**: funciona com o `TINY_TOKEN` que já está nas variáveis (no log de inicialização aparece `Tiny: on`). Sem ele, nada muda. As ocorrências antigas ganham o produto aos poucos, 3 a cada 10 minutos.
+2. **Responsável**: cada pessoa usa **Assumir** no detalhe e o filtro **Minhas** na lista. Para receber e-mail quando alguém atribuir uma ocorrência a você, ligue os avisos em **Minha conta**.
