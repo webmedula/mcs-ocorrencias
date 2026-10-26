@@ -29,7 +29,8 @@ export function anonimizar(id: number): void {
          descricao = '[Conteúdo removido a pedido do titular dos dados ou pelo prazo de retenção]', anonimizada = 1,
          atualizado_em = datetime('now') WHERE id = ?`,
     ).run(id);
-    db.prepare("UPDATE eventos SET texto = '[conteúdo removido]' WHERE ocorrencia_id = ? AND autor IS NOT NULL AND autor != 'Sistema'").run(id);
+    db.prepare("UPDATE eventos SET texto = '[conteúdo removido]' WHERE ocorrencia_id = ? AND ((autor IS NOT NULL AND autor != 'Sistema') OR do_cliente = 1)").run(id);
+    db.prepare("UPDATE pesquisas SET comentario = NULL WHERE ocorrencia_id = ?").run(id);
     db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?, 'Dados pessoais removidos (anonimização).', 0, 'Sistema')").run(id);
   })();
 }
@@ -50,14 +51,16 @@ export function excluir(id: number): void {
 
 /** Cópia legível dos dados de uma ocorrência (direito de acesso do titular). */
 export function exportarDados(o: any) {
-  const eventos = db.prepare("SELECT texto, publico, autor, criado_em FROM eventos WHERE ocorrencia_id = ? ORDER BY id").all(o.id);
+  const eventos = db.prepare("SELECT texto, publico, autor, do_cliente, criado_em FROM eventos WHERE ocorrencia_id = ? ORDER BY id").all(o.id);
   const anexos = db.prepare("SELECT original, mime, tamanho FROM anexos WHERE ocorrencia_id = ?").all(o.id);
   const mensagens = db.prepare("SELECT remetente, destinatario, texto, data FROM ml_mensagens WHERE ocorrencia_id = ? ORDER BY data, id").all(o.id);
+  const pesquisa = db.prepare("SELECT enviada_em, nota, comentario, respondida_em FROM pesquisas WHERE ocorrencia_id = ?").get(o.id) ?? null;
   return {
     gerado_em: new Date().toISOString(),
     protocolo: o.protocolo, canal: o.canal, pedido: o.pedido, tipo: o.tipo, status: o.status, origem: o.origem,
     nome: o.nome, email: o.email, telefone: o.telefone, descricao: o.descricao, criado_em: o.criado_em,
     fotos_enviadas: anexos, historico: eventos, mensagens_mercado_livre: mensagens,
+    pesquisa_satisfacao: pesquisa,
   };
 }
 

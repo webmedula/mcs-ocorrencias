@@ -151,3 +151,10 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .produto .sem-foto { display: flex; align-items: center; justify-content: center; font-size: .75rem; color: var(--suave); }
 .produto small { display: block; color: var(--suave); margin: 2px 0 6px; }
 .produto a { font-size: .85rem; }
+
+/* v1.6.0: mensagem do cliente, desfecho, pesquisa e exportação */
+.hist-p .tipo.cli { background: #dce8f7; color: #1f4a85; }
+.campos-desfecho { display: flex; flex-wrap: wrap; gap: 12px; }
+.campos-desfecho > div { flex: 1 1 180px; min-width: 0; }
+.faixa.pesquisa q { display: block; margin-top: 4px; font-style: italic; }
+.filtros #exportar-csv { flex: 0 0 auto; min-height: 44px; margin: 0; }

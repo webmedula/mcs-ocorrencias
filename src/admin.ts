@@ -2,7 +2,8 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { z } from "zod";
-import { CANAIS, STATUS, TIPOS, config, type Status } from "./config.js";
+import { CANAIS, DESFECHOS, STATUS, TIPOS, config, type Desfecho, type Status } from "./config.js";
+import { dataLocal, gerarCsv, reais } from "./csv.js";
 import { db } from "./db.js";
 import {
   conferirSenha, criarSessao, encerrarSessao, exigirLogin, gastarTempo, gerarChave, hashSenha,
@@ -139,14 +140,12 @@ admin.get("/produto-img/:arquivo", (req, res) => {
   res.sendFile(caminho);
 });
 
-admin.get("/ocorrencias", (req, res) => {
-  const q = String(req.query.q ?? "").trim().slice(0, 80);
-  const canal = String(req.query.canal ?? "");
-  const status = String(req.query.status ?? "");
-  const origem = String(req.query.origem ?? "");
-  const pagina = Math.max(1, Number(req.query.pagina) || 1);
-  const porPagina = 25;
-
+// Filtros da lista (também usados na exportação em CSV)
+function filtroLista(query: express.Request["query"]) {
+  const q = String(query.q ?? "").trim().slice(0, 80);
+  const canal = String(query.canal ?? "");
+  const status = String(query.status ?? "");
+  const origem = String(query.origem ?? "");
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (canal in CANAIS) { where.push("canal = ?"); args.push(canal); }
@@ -157,7 +156,13 @@ admin.get("/ocorrencias", (req, res) => {
     where.push("(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')");
     args.push(like, like, like, like);
   }
-  const cond = where.length ? "WHERE " + where.join(" AND ") : "";
+  return { cond: where.length ? "WHERE " + where.join(" AND ") : "", args };
+}
+
+admin.get("/ocorrencias", (req, res) => {
+  const pagina = Math.max(1, Number(req.query.pagina) || 1);
+  const porPagina = 25;
+  const { cond, args } = filtroLista(req.query);
   const total = (db.prepare(`SELECT COUNT(*) AS n FROM ocorrencias ${cond}`).get(...args) as { n: number }).n;
   const itens = db
     .prepare(
@@ -174,7 +179,36 @@ admin.get("/ocorrencias", (req, res) => {
   const contagem: Record<string, number> = Object.fromEntries(statusKeys.map((k) => [k, 0]));
   for (const r of db.prepare("SELECT status, COUNT(*) AS n FROM ocorrencias GROUP BY status").all() as { status: string; n: number }[])
     contagem[r.status] = r.n;
-  res.json({ itens, total, pagina, porPagina, contagem, canais: CANAIS, tipos: TIPOS, status: STATUS });
+  res.json({ itens, total, pagina, porPagina, contagem, canais: CANAIS, tipos: TIPOS, status: STATUS, desfechos: DESFECHOS });
+});
+
+// Exportação da lista em CSV, com os mesmos filtros (v1.6.0). Tem dados pessoais: só pessoas, e fica no registro.
+const LIMITE_CSV = 20000;
+admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
+  const { cond, args } = filtroLista(req.query);
+  const linhas = db
+    .prepare(
+      `SELECT o.protocolo, o.criado_em, o.origem, o.canal, o.pedido, o.tipo, o.status, o.nome, o.email, o.telefone,
+              o.desfecho, o.custo_centavos, o.resolvida_em, o.prazo_em, o.tiny_status, o.atualizado_em,
+              (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos, p.nota
+       FROM ocorrencias o LEFT JOIN pesquisas p ON p.ocorrencia_id = o.id
+       ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ?`,
+    )
+    .all(...args, LIMITE_CSV) as any[];
+  const csv = gerarCsv(
+    ["Protocolo", "Aberta em", "Origem", "Canal", "Pedido", "Assunto", "Status", "Cliente", "E-mail", "Telefone", "Fotos",
+      "Desfecho", "Custo (R$)", "Resolvida em", "Prazo ML", "Nota (1-5)", "Tiny", "Atualizada em"],
+    linhas.map((o) => [
+      o.protocolo, dataLocal(o.criado_em), o.origem === "ml" ? "Mercado Livre (reclamação)" : "Formulário", CANAIS[o.canal as keyof typeof CANAIS] ?? o.canal,
+      o.pedido, TIPOS[o.tipo as keyof typeof TIPOS] ?? o.tipo, STATUS[o.status as Status] ?? o.status, o.nome, o.email, o.telefone, o.fotos,
+      o.desfecho ? DESFECHOS[o.desfecho as Desfecho] ?? o.desfecho : "", reais(o.custo_centavos), dataLocal(o.resolvida_em), dataLocal(o.prazo_em),
+      o.nota ?? "", o.tiny_status, dataLocal(o.atualizado_em),
+    ]),
+  );
+  registrar("lista_exportada", { usuarioId: (req.ator as { id: number }).id, detalhe: `${linhas.length} ocorrência(s)`, req });
+  const hoje = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="ocorrencias-${hoje}.csv"`);
+  res.type("text/csv; charset=utf-8").send(csv);
 });
 
 admin.get("/ocorrencias/:protocolo", (req, res) => {
@@ -182,11 +216,12 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   const anexos = db.prepare("SELECT id, original, mime, tamanho FROM anexos WHERE ocorrencia_id = ? ORDER BY id").all(o.id);
   const eventos = db
-    .prepare("SELECT id, texto, publico, autor, criado_em FROM eventos WHERE ocorrencia_id = ? ORDER BY id")
+    .prepare("SELECT id, texto, publico, autor, do_cliente, criado_em FROM eventos WHERE ocorrencia_id = ? ORDER BY id")
     .all(o.id);
   let tiny: unknown = null;
   try { tiny = o.tiny_json ? JSON.parse(o.tiny_json) : null; } catch { /* ignora */ }
   const { ip_hash: _ip, tiny_json: _t, ml_json: mlJson, produto_json: pj, ...resto } = o;
+  const pesquisa = db.prepare("SELECT enviada_em, nota, comentario, respondida_em FROM pesquisas WHERE ocorrencia_id = ?").get(o.id) ?? null;
   let ml: unknown = null;
   if (o.origem === "ml") {
     let claim: any = null;
@@ -196,7 +231,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj) });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -206,12 +241,41 @@ admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.status === p.data.status) return res.json({ status: o.status });
   db.transaction(() => {
-    db.prepare("UPDATE ocorrencias SET status = ?, atualizado_em = datetime('now') WHERE id = ?").run(p.data.status, o.id);
+    // resolvida_em marca quando foi resolvida (tempo de resolução e pesquisa de satisfação)
+    db.prepare(
+      `UPDATE ocorrencias SET status = ?, resolvida_em = CASE WHEN ? = 'resolvida' THEN datetime('now') ELSE NULL END,
+         atualizado_em = datetime('now') WHERE id = ?`,
+    ).run(p.data.status, p.data.status, o.id);
     db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,1,?)").run(
       o.id, `Status atualizado: ${STATUS[p.data.status]}.`, nomeDoAtor(req.ator!),
     );
   })();
   res.json({ status: p.data.status });
+});
+
+// Desfecho e custo da resolução (v1.6.0). Pessoas e Gerente IA.
+const desfechoKeys = Object.keys(DESFECHOS) as [Desfecho, ...Desfecho[]];
+admin.patch("/ocorrencias/:protocolo/desfecho", (req, res) => {
+  const p = z
+    .object({
+      desfecho: z.enum(desfechoKeys, { errorMap: () => ({ message: "Desfecho inválido." }) }).nullable(),
+      custo: z.number({ invalid_type_error: "Custo inválido." }).min(0, "O custo não pode ser negativo.").max(1_000_000, "Custo alto demais.").nullable().optional(),
+    })
+    .safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  // Sem desfecho não há custo a registrar
+  const centavos = p.data.custo == null || !p.data.desfecho ? null : Math.round(p.data.custo * 100);
+  if (o.desfecho === p.data.desfecho && o.custo_centavos === centavos) return res.json({ desfecho: o.desfecho, custo: p.data.custo ?? null });
+  const descricao = p.data.desfecho
+    ? `Desfecho registrado: ${DESFECHOS[p.data.desfecho]}${centavos != null ? ` · custo R$ ${reais(centavos)}` : ""}.`
+    : "Desfecho removido.";
+  db.transaction(() => {
+    db.prepare("UPDATE ocorrencias SET desfecho = ?, custo_centavos = ?, atualizado_em = datetime('now') WHERE id = ?").run(p.data.desfecho, centavos, o.id);
+    db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)").run(o.id, descricao, nomeDoAtor(req.ator!));
+  })();
+  res.json({ desfecho: p.data.desfecho, custo: centavos == null ? null : centavos / 100 });
 });
 
 const texto = z.object({ texto: z.string().trim().min(2, "Escreva o texto.").max(3000) });
@@ -469,20 +533,32 @@ admin.get("/estatisticas", (req, res) => {
      JOIN (SELECT ocorrencia_id, MIN(criado_em) t FROM eventos WHERE autor IS NOT NULL GROUP BY ocorrencia_id) p ON p.ocorrencia_id = o.id
      WHERE o.criado_em >= datetime('now', ?)`, desde);
   const resolucao = um(
-    `SELECT AVG((julianday(atualizado_em) - julianday(criado_em)) * 24) h, COUNT(*) n FROM ocorrencias
+    `SELECT AVG((julianday(COALESCE(resolvida_em, atualizado_em)) - julianday(criado_em)) * 24) h, COUNT(*) n FROM ocorrencias
      WHERE status = 'resolvida' AND criado_em >= datetime('now', ?)`, desde);
+  // Desfecho e custo: pela data em que foi resolvida (as antigas, sem essa data, pela última atualização)
+  const resolvidaNoPeriodo = "status = 'resolvida' AND COALESCE(resolvida_em, atualizado_em) >= datetime('now', ?)";
+  const custo = um(`SELECT COALESCE(SUM(custo_centavos), 0) c, COUNT(custo_centavos) n FROM ocorrencias WHERE ${resolvidaNoPeriodo}`, desde);
+  const satisfacao = um(
+    `SELECT AVG(nota) media, COUNT(*) n, SUM(nota >= 4) boas FROM pesquisas WHERE nota IS NOT NULL AND respondida_em >= datetime('now', ?)`, desde);
+  const enviadas = um("SELECT COUNT(*) n FROM pesquisas WHERE enviada_em >= datetime('now', ?)", desde).n;
   const arred = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
   res.json({
     dias, total,
     abertas: um("SELECT COUNT(*) n FROM ocorrencias WHERE status != 'resolvida'").n,
     resolvidas: um("SELECT COUNT(*) n FROM ocorrencias WHERE status = 'resolvida' AND criado_em >= datetime('now', ?)", desde).n,
     horasPrimeiraResposta: arred(primeira.h), horasResolucao: arred(resolucao.h),
+    custoTotal: custo.c / 100, comCusto: custo.n,
+    porDesfecho: rows(
+      `SELECT COALESCE(desfecho, 'sem_registro') k, COUNT(*) n, COALESCE(SUM(custo_centavos), 0) / 100.0 custo FROM ocorrencias
+       WHERE ${resolvidaNoPeriodo} GROUP BY k ORDER BY n DESC`, desde),
+    satisfacao: { media: arred(satisfacao.media), respostas: satisfacao.n, boas: satisfacao.boas ?? 0, enviadas },
+    porNota: rows("SELECT nota k, COUNT(*) n FROM pesquisas WHERE nota IS NOT NULL AND respondida_em >= datetime('now', ?) GROUP BY nota", desde),
     porStatus: rows("SELECT status k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY status", desde),
     porCanal: rows("SELECT canal k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY canal ORDER BY n DESC", desde),
     porTipo: rows("SELECT tipo k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY tipo ORDER BY n DESC", desde),
     porOrigem: rows("SELECT origem k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY origem", desde),
-    porSemana: rows("SELECT strftime('%Y-%m-%d', criado_em, 'weekday 1', '-7 days') k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now','-56 days') GROUP BY k ORDER BY k"),
-    canais: CANAIS, tipos: TIPOS,
+    porSemana: rows("SELECT strftime('%Y-%m-%d', criado_em, '-6 days', 'weekday 1') k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now','-56 days') GROUP BY k ORDER BY k"),
+    canais: CANAIS, tipos: TIPOS, desfechos: DESFECHOS,
   });
 });
 

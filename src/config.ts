@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.5.2",
+  version: "1.6.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -47,6 +47,9 @@ export const config = {
   timezone: env.TZ_LOCAL ?? "America/Sao_Paulo",
   resumoHora: env.RESUMO_HORA === undefined || env.RESUMO_HORA === "" ? 8 : Number(env.RESUMO_HORA),
   backupManter: Math.max(1, Number(env.BACKUP_MANTER ?? 14)),
+  // Pesquisa de satisfação (v1.6.0): e-mail ao cliente N horas depois de a ocorrência ser resolvida
+  pesquisaSatisfacao: (env.PESQUISA_SATISFACAO ?? "true").trim().toLowerCase() !== "false",
+  pesquisaHoras: Math.max(0, Number(env.PESQUISA_HORAS ?? 2) || 0),
   publicUrl: env.PUBLIC_URL ?? "http://localhost:3000",
   // Painel interno: o primeiro gerente é criado a partir destas variáveis (só se ainda não houver usuários).
   adminEmail: (env.ADMIN_EMAIL ?? "").trim().toLowerCase(),
@@ -88,6 +91,19 @@ export const STATUS = {
   resolvida: "Resolvida",
 } as const;
 
+// Como a ocorrência foi resolvida (v1.6.0)
+export const DESFECHOS = {
+  reembolso_total: "Reembolso total",
+  reembolso_parcial: "Reembolso parcial",
+  reenvio: "Reenvio do produto",
+  troca: "Troca",
+  devolucao: "Devolução",
+  cupom: "Cupom ou desconto",
+  orientacao: "Orientação ao cliente",
+  sem_acao: "Sem ação (improcedente)",
+} as const;
+
 export type Canal = keyof typeof CANAIS;
 export type Tipo = keyof typeof TIPOS;
 export type Status = keyof typeof STATUS;
+export type Desfecho = keyof typeof DESFECHOS;

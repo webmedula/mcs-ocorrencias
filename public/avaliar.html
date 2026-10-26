@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>Avaliar atendimento</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo"><div class="in"><a class="logo" href="index.html" aria-label="MCS Brasil, página inicial"><img src="logo.png" width="500" height="125" alt="MCS Brasil"></a><span id="marca" class="oculto">Central de Ocorrências</span></div></header>
+  <main class="medio">
+    <h1 class="menor">Como foi o seu atendimento?</h1>
+    <p class="sub" id="sub">Sua opinião nos ajuda a melhorar.</p>
+
+    <div id="erro-geral" class="erro-geral oculto" role="alert"></div>
+    <form id="form" class="card simples avaliar oculto" novalidate>
+      <p class="aviso" id="protocolo"></p>
+      <div class="notas" role="group" aria-label="Nota de 1 a 5" id="notas"></div>
+      <p id="ok" class="ok-msg oculto" role="status"></p>
+      <label for="comentario">Quer contar mais? <span class="dica">(opcional)</span></label>
+      <textarea id="comentario" maxlength="1000"></textarea>
+      <button type="submit" id="enviar" class="primario">Enviar avaliação</button>
+    </form>
+  </main>
+  <footer><span id="rodape"></span><a class="link-rodape" href="privacidade.html">Política de privacidade</a></footer>
+  <script src="avaliar.js"></script>
+</body>
+</html>

@@ -192,3 +192,22 @@ CREATE INDEX IF NOT EXISTS idx_registro_tipo ON registro(tipo, criado_em);
 -- Reclamações do ML que foram apagadas/anonimizadas a pedido do titular: não voltam na sincronização
 CREATE TABLE IF NOT EXISTS ml_ignorados (claim_id TEXT PRIMARY KEY, criado_em TEXT NOT NULL DEFAULT (datetime('now')));
 `);
+
+// ---------- v1.6.0: mensagens do cliente, desfecho e pesquisa de satisfação ----------
+const colunasOc16 = (db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasOc16.includes("desfecho")) db.exec("ALTER TABLE ocorrencias ADD COLUMN desfecho TEXT");
+if (!colunasOc16.includes("custo_centavos")) db.exec("ALTER TABLE ocorrencias ADD COLUMN custo_centavos INTEGER");
+if (!colunasOc16.includes("resolvida_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN resolvida_em TEXT");
+const colunasEv16 = (db.prepare("PRAGMA table_info(eventos)").all() as { name: string }[]).map((c) => c.name);
+// Mensagem escrita pelo próprio cliente na página de consulta
+if (!colunasEv16.includes("do_cliente")) db.exec("ALTER TABLE eventos ADD COLUMN do_cliente INTEGER NOT NULL DEFAULT 0");
+db.exec(`
+CREATE TABLE IF NOT EXISTS pesquisas (
+  ocorrencia_id INTEGER PRIMARY KEY REFERENCES ocorrencias(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  enviada_em TEXT NOT NULL DEFAULT (datetime('now')),
+  nota INTEGER CHECK (nota BETWEEN 1 AND 5),
+  comentario TEXT,
+  respondida_em TEXT
+);
+`);

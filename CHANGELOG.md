@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.6.0 — 2026-10-26
+
+Conversa com o cliente pela consulta, desfecho e custo, pesquisa de satisfação e exportação em CSV.
+
+- **Cliente responde pela página de consulta**: depois de informar protocolo e e-mail, o cliente escreve uma mensagem e anexa até 5 fotos por vez (até 15 por atendimento). A mensagem aparece no histórico do painel com o selo "Cliente escreveu" e as fotos entram junto com as do registro. Se o atendimento estava "Aguardando cliente" ou "Resolvido", volta para **Em análise**. Aviso no Telegram e por e-mail para a equipe.
+- **Desfecho e custo da resolução**: no detalhe da ocorrência, escolha como foi resolvida (reembolso total ou parcial, reenvio, troca, devolução, cupom, orientação, sem ação) e quanto custou. Ocorrência resolvida sem desfecho mostra um lembrete. O Gerente IA também pode registrar (`PATCH /ocorrencias/{protocolo}/desfecho`).
+- **Pesquisa de satisfação**: o cliente do formulário recebe um e-mail com notas de 1 a 5 algumas horas depois de a ocorrência ser resolvida (`PESQUISA_HORAS`, padrão 2; `PESQUISA_SATISFACAO=false` desliga). Um clique já registra a nota, e ele pode deixar um comentário. Nota 1 ou 2 avisa no Telegram e por e-mail. A avaliação aparece no detalhe da ocorrência. Só uma pesquisa por ocorrência; ocorrências resolvidas antes desta versão não recebem.
+- **Aba Números**: novos indicadores de tempo até resolver, custo das resolvidas e satisfação média, e gráficos de desfecho (com custo por tipo) e de notas da pesquisa.
+- **Exportar CSV**: botão ao lado dos filtros baixa a lista inteira com os filtros aplicados, pronta para o Excel (acentos, separador ";" e valores com vírgula). Só para pessoas da equipe, e cada exportação fica no Registro de atividades.
+- Correção: no gráfico "Ocorrências por semana", o que chegava numa segunda-feira caía na semana anterior.
+- O tempo de resolução passa a usar a data em que a ocorrência foi marcada como resolvida (antes usava a última atualização).
+- LGPD: anonimizar também apaga as mensagens escritas pelo cliente e o comentário da pesquisa; "Baixar dados do titular" inclui a pesquisa.
+- **Testes automáticos** (`npm test`, com Vitest): fluxo da mensagem do cliente, desfecho, CSV e pesquisa. Rodam em cada pull request e antes de publicar a imagem.
+- Arrumação: versão corrigida no README e no arquivo `VERSION` (estavam em 1.0.5 e 1.5.0). O servidor foi dividido em `src/app.ts` (rotas) e `src/server.ts` (inicialização), para os testes subirem o app sem as rotinas.
+- Novas variáveis (opcionais): `PESQUISA_SATISFACAO`, `PESQUISA_HORAS`.
+
 ## v1.5.2 — 2026-10-13
 
 - Correção: **enviar resposta ao comprador no Mercado Livre** falhava com "Request method 'POST' is not supported". O envio agora usa o endereço correto da API (`/actions/send-message`).

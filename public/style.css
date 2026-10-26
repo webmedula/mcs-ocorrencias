@@ -220,3 +220,18 @@ footer { max-width: 1160px; margin: 0 auto; padding: 8px 24px 40px; display: fle
 /* v1.4.1 — link da política no rodapé */
 footer .link-rodape { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 footer .link-rodape:hover { color: #a83300; }
+
+/* v1.6.0: mensagem do cliente na consulta e página de avaliação */
+.hist .texto { white-space: pre-line; overflow-wrap: anywhere; }
+.hist li.cliente::before { background: #3b6fb6; box-shadow: 0 0 0 4px #dce8f7; }
+.hist li.cliente .texto { display: block; margin-top: 4px; padding: 10px 14px; border-radius: 12px; background: #eef3fb; }
+.msg-cliente { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--campo); }
+.msg-cliente h2 { font-family: var(--titulo); font-weight: 600; font-size: 1.2rem; margin: 0 0 4px; }
+.msg-cliente textarea { min-height: 110px; margin-bottom: 14px; }
+.ok-msg { color: #15613c; background: #e9f6ee; border-radius: 12px; padding: 12px 14px; margin: 0 0 16px; }
+.notas { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 18px 0 6px; }
+.notas button { flex-direction: column; gap: 2px; min-height: 72px; padding: 8px 4px; background: #fff; color: var(--texto); border: 1.5px solid var(--campo); font-size: 1.4rem; }
+.notas button small { font-size: .72rem; font-weight: 500; color: var(--suave); }
+.notas button:hover { background: var(--marca-clara); color: var(--texto); }
+.notas button[aria-pressed="true"] { border: 2px solid var(--laranja); background: var(--marca-clara); }
+.avaliar label { margin-top: 18px; }

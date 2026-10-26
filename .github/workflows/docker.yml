@@ -1,4 +1,4 @@
-# Publica a imagem no GitHub Container Registry a cada push na main.
+# Roda os testes e, se passarem, publica a imagem no GitHub Container Registry a cada push na main.
 # No Easypanel: Fonte = Imagem Docker → ghcr.io/<usuario>/<repo>:latest
 name: Publicar imagem
 on:
@@ -9,7 +9,19 @@ permissions:
   contents: read
   packages: write
 jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
   docker:
+    needs: testes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
