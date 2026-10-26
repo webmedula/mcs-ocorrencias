@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.7.0 — 2026-10-26
+
+Produto e foto pelo Tiny e responsável pela ocorrência.
+
+- **Produto e foto pelo Tiny**: ocorrências do formulário cujo pedido foi encontrado no Tiny passam a mostrar os produtos (foto, nome, SKU, variação, quantidade e preço) no detalhe e a miniatura na lista, como as reclamações do Mercado Livre. A foto vem do cadastro do produto no Tiny (anexo ou imagem externa; a variação sem foto usa a do produto pai) e fica guardada em `/data/produtos`. A busca acontece logo depois do registro, sem atrasar o cliente; se o Tiny falhar, ou para ocorrências anteriores a esta versão, a rotina completa aos poucos (3 a cada 10 min). Precisa de `TINY_TOKEN`.
+- **Responsável pela ocorrência**: no detalhe, escolha quem cuida (ou clique em **Assumir**); a lista mostra "Com Fulano" e ganhou o filtro **Minhas / Sem responsável / por pessoa**, que também vale para o CSV (nova coluna "Responsável"). Quem responde o cliente (e-mail ou Mercado Livre) primeiro vira responsável se ninguém tinha assumido. Quem recebe uma ocorrência atribuída por outra pessoa ganha um e-mail, se ligou os avisos em Minha conta. O Gerente IA também pode atribuir (`PATCH /ocorrencias/{protocolo}/responsavel`).
+- Testes novos para o Tiny (com respostas simuladas) e para o responsável.
+
 ## v1.6.0 — 2026-10-26
 
 Conversa com o cliente pela consulta, desfecho e custo, pesquisa de satisfação e exportação em CSV.

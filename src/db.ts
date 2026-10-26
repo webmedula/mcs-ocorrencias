@@ -211,3 +211,8 @@ CREATE TABLE IF NOT EXISTS pesquisas (
   respondida_em TEXT
 );
 `);
+
+// ---------- v1.7.0: responsável pela ocorrência ----------
+if (!(db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).some((c) => c.name === "responsavel_id"))
+  db.exec("ALTER TABLE ocorrencias ADD COLUMN responsavel_id INTEGER");
+db.exec("CREATE INDEX IF NOT EXISTS idx_oc_responsavel ON ocorrencias(responsavel_id)");

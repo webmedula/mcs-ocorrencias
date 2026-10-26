@@ -158,3 +158,9 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .campos-desfecho > div { flex: 1 1 180px; min-width: 0; }
 .faixa.pesquisa q { display: block; margin-top: 4px; font-style: italic; }
 .filtros #exportar-csv { flex: 0 0 auto; min-height: 44px; margin: 0; }
+
+/* v1.7.0: responsável */
+.linha-resp { display: flex; gap: 10px; align-items: center; }
+.linha-resp select { flex: 1 1 auto; min-width: 0; }
+.linha-resp button.mini { margin: 0; flex: none; }
+.resp-lista { color: #1f4a85; }

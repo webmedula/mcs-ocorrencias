@@ -15,6 +15,7 @@ import { admin } from "./admin.js";
 import { MlErro, concluirAutorizacao, sincronizar } from "./ml.js";
 import { avisarEquipeEmail, avisarTelegram, enviarConfirmacao, enviarTelegram, descreverErroMail, esc, type OcorrenciaResumo } from "./notify.js";
 import { dadosDaPesquisa, responderPesquisa } from "./pesquisa.js";
+import { completarProdutosTiny } from "./produtos.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.resolve(__dirname, "../public");
@@ -182,6 +183,7 @@ app.post("/api/ocorrencias", limiteEnvio, upload.array("fotos", 5), async (req, 
   const inserirEvento = db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico) VALUES (?,?,?)");
 
   let protocolo = "";
+  let ocorrenciaId = 0;
   try {
     db.transaction(() => {
       for (let tentativa = 0; ; tentativa++) {
@@ -201,6 +203,7 @@ app.post("/api/ocorrencias", limiteEnvio, upload.array("fotos", 5), async (req, 
             ip_hash: hashIp(req.ip ?? ""),
           });
           const id = Number(r.lastInsertRowid);
+          ocorrenciaId = id;
           for (const f of arquivos) inserirAnexo.run(id, f.filename, f.originalname.slice(0, 200), f.mimetype, f.size);
           inserirEvento.run(id, "Ocorrência recebida.", 1);
           break;
@@ -234,6 +237,9 @@ app.post("/api/ocorrencias", limiteEnvio, upload.array("fotos", 5), async (req, 
   enviarConfirmacao(resumo).catch((e) => console.error(`[mail] FALHA ao enviar ${protocolo} para ${d.email}: ${descreverErroMail(e)}`));
 
   res.status(201).json({ protocolo });
+  // Produto e foto do pedido, depois de responder (o cliente não espera pelas consultas ao Tiny)
+  if (tiny.status === "encontrado")
+    completarProdutosTiny(ocorrenciaId).catch((e) => console.error(`[tiny] produtos de ${protocolo}: ${e?.message}`));
 });
 
 type OcConsulta = { id: number; protocolo: string; canal: Canal; tipo: Tipo; status: Status; nome: string; anonimizada: number; criado_em: string; atualizado_em: string };

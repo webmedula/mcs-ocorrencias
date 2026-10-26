@@ -1,10 +1,10 @@
-// Central de Ocorrências v1.6.0 — painel interno
+// Central de Ocorrências v1.7.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
   const PAPEL = { gerente: "Gerente", atendimento: "Atendimento" };
 
-  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "" };
+  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", responsavel: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "" };
 
   // ---------- utilidades ----------
   function h(tag, attrs, ...filhos) {
@@ -75,7 +75,7 @@
   // ---------- ocorrências ----------
   async function carregarLista() {
     const f = estado.filtro;
-    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, pagina: String(f.pagina) });
+    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel, pagina: String(f.pagina) });
     const r = await api("GET", "/ocorrencias?" + q);
     if (!r.ok) return;
     const d = r.json;
@@ -87,7 +87,7 @@
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
         h("td", {}, o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
-          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -117,6 +117,7 @@
   function montarFiltros(d) {
     for (const [k, v] of Object.entries(d.canais)) $("#f-canal").append(h("option", { value: k }, v));
     for (const k of Object.keys(d.status)) $("#f-status").append(h("option", { value: k }, STATUS_INT[k] || k));
+    for (const u of d.equipe || []) $("#f-responsavel").append(h("option", { value: String(u.id) }, u.nome));
   }
 
   function renderKpis(contagem) {
@@ -267,6 +268,7 @@
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
       h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
+      blocoResponsavel(o),
       blocoDesfecho(o),
       blocoPesquisa(o),
       o.anonimizada ? h("p", { class: "faixa neutro" }, "Dados pessoais removidos: não é possível responder o cliente.") : null,
@@ -274,6 +276,28 @@
       h("h3", {}, "Histórico"), hist, lgpd,
     ];
     box.append(...partes.flat(Infinity).filter((x) => x != null && x !== false));
+  }
+
+  // Responsável: seletor com a equipe ativa e atalho "Assumir"
+  function blocoResponsavel(o) {
+    const equipe = estado.meta?.equipe || [];
+    const atual = o.responsavel;
+    const opcoes = [...equipe];
+    if (atual && !opcoes.some((u) => u.id === atual.id)) opcoes.push({ id: atual.id, nome: atual.nome + " (desativado)" });
+    const sel = h("select", { id: "d-resp-pessoa" }, h("option", { value: "" }, "Ninguém"),
+      opcoes.map((u) => h("option", { value: String(u.id), selected: atual?.id === u.id }, u.nome)));
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    async function salvar(usuarioId) {
+      sel.disabled = true;
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/responsavel`, { usuarioId });
+      if (r.ok) { await selecionar(o.protocolo, false); await carregarLista(); }
+      else { sel.disabled = false; msg.textContent = r.json.erro || "Não foi possível mudar o responsável."; mostrar(msg, true); }
+    }
+    sel.addEventListener("change", () => salvar(sel.value ? Number(sel.value) : null));
+    const meuId = estado.eu?.id;
+    const assumir = meuId && atual?.id !== meuId ? h("button", { type: "button", class: "sec mini", onclick: () => salvar(meuId) }, "Assumir") : null;
+    return h("div", { class: "acao" }, h("label", { for: "d-resp-pessoa" }, "Responsável"),
+      h("div", { class: "linha-resp" }, sel, assumir), msg);
   }
 
   // Desfecho e custo da resolução
@@ -618,9 +642,10 @@
   $("#f-canal").addEventListener("change", (e) => { estado.filtro.canal = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-origem").addEventListener("change", (e) => { estado.filtro.origem = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-status").addEventListener("change", (e) => { estado.filtro.status = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
+  $("#f-responsavel").addEventListener("change", (e) => { estado.filtro.responsavel = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#exportar-csv").addEventListener("click", () => {
     const f = estado.filtro;
-    window.location.assign("/api/admin/ocorrencias.csv?" + new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem }));
+    window.location.assign("/api/admin/ocorrencias.csv?" + new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel }));
   });
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });
