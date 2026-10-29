@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.7.0",
+  version: "1.8.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -107,3 +107,29 @@ export type Canal = keyof typeof CANAIS;
 export type Tipo = keyof typeof TIPOS;
 export type Status = keyof typeof STATUS;
 export type Desfecho = keyof typeof DESFECHOS;
+
+// Devoluções do Mercado Livre (v1.8.0)
+export const STATUS_DEVOLUCAO = {
+  aguardando_liberacao: "Aguardando liberação",
+  liberada: "Liberada, aguardando envio",
+  em_transito: "Em trânsito",
+  nao_entregue: "Não chegou",
+  recebida: "Recebida, a conferir",
+  conferida: "Conferida",
+  em_contestacao: "Em contestação",
+  encerrada: "Encerrada",
+  cancelada: "Cancelada",
+} as const;
+
+// Estado em que o produto voltou (conferência feita pelo colaborador)
+export const CONFERENCIAS = {
+  ok: "Voltou em bom estado",
+  danificado: "Voltou danificado",
+  incompleto: "Voltou incompleto",
+  diferente: "Voltou um produto diferente",
+  sem_produto: "A caixa veio sem o produto",
+  outro: "Outro problema",
+} as const;
+
+export type StatusDevolucao = keyof typeof STATUS_DEVOLUCAO;
+export type Conferencia = keyof typeof CONFERENCIAS;

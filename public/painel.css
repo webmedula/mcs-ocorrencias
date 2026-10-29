@@ -164,3 +164,22 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .linha-resp select { flex: 1 1 auto; min-width: 0; }
 .linha-resp button.mini { margin: 0; flex: none; }
 .resp-lista { color: #1f4a85; }
+
+/* Devoluções (v1.8.0) */
+.etiqueta.dev-aguardando_liberacao { background: #ffd9d2; color: #8a2412; }
+.etiqueta.dev-liberada { background: #fff1bf; color: #6a4b00; }
+.etiqueta.dev-em_transito { background: #dce8f7; color: #1f4a85; }
+.etiqueta.dev-nao_entregue { background: #ffd9d2; color: #8a2412; }
+.etiqueta.dev-recebida { background: #ffe0cc; color: var(--marca-escura); }
+.etiqueta.dev-conferida { background: #ddf1e5; color: #15613c; }
+.etiqueta.dev-em_contestacao { background: #e8dcf7; color: #4b2a85; }
+.etiqueta.dev-encerrada { background: #ece8e4; color: #4a4540; }
+.etiqueta.dev-cancelada { background: #ece8e4; color: #6b645d; }
+.kpi.dev-aguardando_liberacao, .kpi.dev-nao_entregue { border-top-color: #c8412b; }
+.kpi.dev-em_transito { border-top-color: #3b6fb6; }
+.kpi.dev-recebida { border-top-color: var(--laranja); }
+.kpi.dev-em_contestacao { border-top-color: #7a4cc2; }
+.sel-ml.dev { background: #e8dcf7; color: #4b2a85; }
+.faixa.devolucao h3 { margin: 6px 0 2px; }
+.faixa.devolucao form.acao { background: #fff; border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+.faixa.devolucao input[type="file"] { width: 100%; }

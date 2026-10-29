@@ -18,6 +18,7 @@
       </div>
       <nav id="menu" class="menu oculto" aria-label="Painel">
         <button type="button" class="aba ativa" data-aba="ocorrencias">Ocorrências</button>
+        <button type="button" class="aba" data-aba="devolucoes">Devoluções</button>
         <button type="button" class="aba oculto" data-aba="equipe" id="aba-equipe">Equipe</button>
         <button type="button" class="aba" data-aba="numeros">Números</button>
         <button type="button" class="aba" data-aba="conta">Minha conta</button>
@@ -104,6 +105,33 @@
           <p class="vazio" id="detalhe-vazio">Selecione uma ocorrência na lista.</p>
         </section>
       </div>
+    </section>
+
+    <!-- Devoluções (Mercado Livre) -->
+    <section id="v-devolucoes" class="oculto">
+      <div class="cab-num"><h1 class="menor">Devoluções</h1></div>
+      <p class="aviso">Devoluções do Mercado Livre acompanhadas pela Central. As que pedem ação aparecem primeiro. Clique para abrir, conferir o produto, lançar custos ou contestar.</p>
+      <div class="kpis" id="dv-kpis"></div>
+      <section class="lista card-lista" aria-label="Lista de devoluções">
+        <div class="filtros">
+          <label class="so-leitor" for="dv-busca">Buscar</label>
+          <input type="search" id="dv-busca" placeholder="Buscar protocolo, pedido, comprador ou rastreio" autocomplete="off">
+          <label class="so-leitor" for="dv-status">Status</label>
+          <select id="dv-status"><option value="">Todos os status</option></select>
+        </div>
+        <div class="tabela-rolagem">
+          <table>
+            <thead><tr><th scope="col">Devolução</th><th scope="col" class="col-m">Rastreio</th><th scope="col">Status</th><th scope="col" class="col-m">Custo</th></tr></thead>
+            <tbody id="dv-linhas"></tbody>
+          </table>
+        </div>
+        <p id="dv-vazio" class="vazio oculto">Nenhuma devolução encontrada.</p>
+        <div class="paginacao">
+          <button type="button" class="sec mini" id="dv-ant">Anterior</button>
+          <span id="dv-info"></span>
+          <button type="button" class="sec mini" id="dv-prox">Próxima</button>
+        </div>
+      </section>
     </section>
 
     <!-- Equipe (gerente) -->

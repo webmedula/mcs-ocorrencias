@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.7.0
+# API do Gerente IA — Central de Ocorrências v1.8.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -22,6 +22,9 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Registrar desfecho e custo (v1.6.0) | `PATCH /ocorrencias/{protocolo}/desfecho` `{"desfecho":"reenvio","custo":49.9}` (`custo` em reais, opcional; `desfecho: null` apaga) | sim |
 | Anotar (nota interna, o cliente não vê) | `POST /ocorrencias/{protocolo}/notas` `{"texto":"…"}` | sim |
 | **Responder o comprador no Mercado Livre** | `POST /ocorrencias/{protocolo}/ml/mensagem` `{"texto":"…"}` (até 2000 caracteres; 20 por hora) | sim |
+| Listar devoluções do ML (v1.8.0) | `GET /devolucoes?status=&q=&pagina=` (status: `aguardando_liberacao`, `liberada`, `em_transito`, `nao_entregue`, `recebida`, `conferida`, `em_contestacao`, `encerrada`, `cancelada`) | sim |
+| Ler a devolução de uma ocorrência | `GET /ocorrencias/{protocolo}/devolucao` (também vem no campo `devolucao` do detalhe) | sim |
+| Conferir, lançar custos, atualizar, contestar | `PATCH /ocorrencias/{protocolo}/devolucao`, `POST …/devolucao/atualizar`, `POST …/devolucao/contestar` | **não** |
 | Ler modelos de resposta | `GET /modelos?protocolo={protocolo}` (traz `texto_pronto` já com nome, protocolo e pedido) | sim |
 | Criar/editar modelos | `POST/PATCH/DELETE /modelos` | **não** |
 | Baixar/anonimizar/excluir dados de uma ocorrência | `/ocorrencias/{protocolo}/exportar`, `/anonimizar`, `/excluir` | **não** |

@@ -1,10 +1,24 @@
-// Central de Ocorrências v1.7.0 — painel interno
+// Central de Ocorrências v1.8.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
   const PAPEL = { gerente: "Gerente", atendimento: "Atendimento" };
+  const CONFERENCIA = {
+    ok: "Voltou em bom estado", danificado: "Voltou danificado", incompleto: "Voltou incompleto",
+    diferente: "Voltou um produto diferente", sem_produto: "A caixa veio sem o produto", outro: "Outro problema",
+  };
+  // Motivos de contestação do ML (SRF2..SRF7); "conf" liga com o resultado da conferência
+  const MOTIVOS_CONTESTACAO = [
+    { id: "SRF2", nome: "O produto chegou danificado", foto: true, conf: "danificado" },
+    { id: "SRF3", nome: "A devolução veio incompleta", foto: false, conf: "incompleto" },
+    { id: "SRF4", nome: "O produto devolvido é diferente do enviado", foto: true, conf: "diferente" },
+    { id: "SRF5", nome: "A embalagem veio sem o produto", foto: false, conf: "sem_produto" },
+    { id: "SRF6", nome: "Outra falha no produto", foto: false, conf: "outro" },
+    { id: "SRF7", nome: "A devolução não chegou", foto: false, conf: null },
+  ];
+  const DINHEIRO = { retained: "Retido pelo Mercado Livre", refunded: "Reembolsado ao comprador", available: "Liberado para você" };
 
-  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", responsavel: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "" };
+  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", responsavel: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "", devFiltro: { q: "", status: "", pagina: 1 }, devMeta: null };
 
   // ---------- utilidades ----------
   function h(tag, attrs, ...filhos) {
@@ -38,7 +52,7 @@
   function mostrarLogin() {
     estado.eu = null;
     mostrar($("#menu"), false);
-    for (const v of ["ocorrencias", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), false);
+    for (const v of ["ocorrencias", "devolucoes", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), false);
     mostrar($("#v-login"), true);
     $("#l-senha").value = "";
     $("#l-email").focus();
@@ -65,8 +79,9 @@
   function abrirAba(nome) {
     estado.aba = nome;
     for (const b of document.querySelectorAll(".aba")) b.classList.toggle("ativa", b.dataset.aba === nome);
-    for (const v of ["ocorrencias", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), v === nome);
+    for (const v of ["ocorrencias", "devolucoes", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), v === nome);
     if (nome === "ocorrencias") { carregarLista().then(() => abrirDoHash()); }
+    if (nome === "devolucoes") carregarDevolucoes();
     if (nome === "equipe") carregarEquipe();
     if (nome === "numeros") carregarNumeros();
     if (nome === "conta") api("GET", "/me").then((r) => { if (r.ok) $("#c-avisos").checked = Boolean(r.json.avisarEmail); });
@@ -87,7 +102,7 @@
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
         h("td", {}, o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
-          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null, o.devolucao ? h("span", { class: "sel-ml dev", title: "Tem devolução" }, "DEV") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -263,6 +278,7 @@
         ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
         : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
       ...(ehMl ? [blocoMl(o)] : []),
+      blocoDevolucao(o),
       blocoProdutos(o),
       tiny,
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
@@ -398,6 +414,180 @@
     });
     caixa.append(f);
     return caixa;
+  }
+
+  // ---------- devoluções (v1.8.0) ----------
+  const reaisTxt = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—");
+  /** "49,90" -> 49.9; vazio -> null; inválido -> NaN */
+  function lerReais(t) {
+    const x = String(t || "").trim().replace(/\s|R\$/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+    if (x === "") return null;
+    const n = Number(x);
+    return Number.isFinite(n) && n >= 0 ? n : NaN;
+  }
+  const emReais = (v) => (typeof v === "number" ? v.toFixed(2).replace(".", ",") : "");
+
+  async function carregarDevolucoes() {
+    const f = estado.devFiltro;
+    const r = await api("GET", "/devolucoes?" + new URLSearchParams({ q: f.q, status: f.status, pagina: String(f.pagina) }));
+    if (!r.ok) return;
+    const d = r.json;
+    if (!estado.devMeta) {
+      for (const [k, v] of Object.entries(d.status)) $("#dv-status").append(h("option", { value: k }, v));
+    }
+    estado.devMeta = d;
+    const kp = $("#dv-kpis");
+    kp.replaceChildren();
+    for (const k of ["aguardando_liberacao", "em_transito", "recebida", "em_contestacao", "nao_entregue"]) {
+      const b = h("button", { type: "button", class: `kpi dev-${k}${f.status === k ? " sel" : ""}`, "aria-pressed": String(f.status === k) }, d.status[k], h("b", {}, String(d.contagem[k] ?? 0)));
+      b.addEventListener("click", () => { f.status = f.status === k ? "" : k; f.pagina = 1; $("#dv-status").value = f.status; carregarDevolucoes(); });
+      kp.append(b);
+    }
+    const corpo = $("#dv-linhas");
+    corpo.replaceChildren();
+    for (const o of d.itens) {
+      const tr = h("tr", { class: "item-oc", tabindex: "0", role: "button", "aria-label": `Abrir ${o.protocolo}` },
+        h("td", {},
+          o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
+          h("strong", {}, o.protocolo, o.tipo ? h("span", { class: "sel-ml dev" }, o.tipo) : null),
+          h("small", {}, `${o.nome} · pedido ${o.pedido}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null,
+          o.status === "aguardando_liberacao" ? prazoEl({ ...o, origem: "ml" }) : null),
+        h("td", { class: "col-m" }, o.rastreio || "—"),
+        h("td", {}, h("span", { class: "etiqueta dev-" + o.status }, d.status[o.status] || o.status)),
+        h("td", { class: "col-m" }, o.custo != null ? reaisTxt(o.custo) : "—"));
+      const abrir = () => { estado.aberto = null; location.hash = encodeURIComponent(o.protocolo); abrirAba("ocorrencias"); };
+      tr.addEventListener("click", abrir);
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
+      corpo.append(tr);
+    }
+    mostrar($("#dv-vazio"), d.itens.length === 0);
+    const paginas = Math.max(1, Math.ceil(d.total / d.porPagina));
+    $("#dv-info").textContent = `${d.total} devoluç${d.total === 1 ? "ão" : "ões"} · página ${d.pagina} de ${paginas}`;
+    $("#dv-ant").disabled = d.pagina <= 1;
+    $("#dv-prox").disabled = d.pagina >= paginas;
+  }
+
+  function blocoDevolucao(o) {
+    const d = o.devolucao;
+    if (!d) return null;
+    const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
+    const linhas = [
+      ["Situação", d.statusRotulo], ["Tipo", d.tipo], ["Rastreio", d.envio.rastreio],
+      ["Previsão de chegada", d.envio.previsaoEm ? fmt(d.envio.previsaoEm) : null],
+      ["Aberta em", d.datas.aberta ? fmt(d.datas.aberta) : null], ["Enviada em", d.datas.enviada ? fmt(d.datas.enviada) : null],
+      ["Recebida em", d.datas.recebida ? fmt(d.datas.recebida) : null], ["Dinheiro", DINHEIRO[d.dinheiro] || d.dinheiro],
+    ].filter((x) => x[1]);
+    const msgTopo = h("p", { class: "msg-ok oculto", role: "status" });
+    const atualizar = h("button", { type: "button", class: "sec mini" }, "Atualizar do Mercado Livre");
+    atualizar.addEventListener("click", async () => {
+      atualizar.disabled = true; atualizar.textContent = "Atualizando…";
+      const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao/atualizar`);
+      if (r.ok) await recarregar();
+      else { atualizar.disabled = false; atualizar.textContent = "Atualizar do Mercado Livre"; msgTopo.textContent = r.json.erro || "Não foi possível atualizar."; mostrar(msgTopo, true); }
+    });
+    const links = h("div", { class: "acoes-u" },
+      d.linkMl ? h("a", { class: "botao-link", href: d.linkMl, target: "_blank", rel: "noopener" }, d.podeLiberar ? "Liberar no Mercado Livre" : "Abrir pedido no Mercado Livre") : null, atualizar);
+    const faixaLiberar = d.podeLiberar
+      ? h("div", { class: "faixa aviso-f" }, "O Mercado Livre está esperando você liberar esta devolução. Libere no pedido (botão abaixo); a Central atualiza o status sozinha em poucos minutos.") : null;
+
+    // Conferência do produto e motivo real
+    const confSel = h("select", { id: "dv-conf" }, h("option", { value: "" }, "Ainda não conferido"),
+      Object.entries(CONFERENCIA).map(([k, v]) => h("option", { value: k, selected: k === d.conferencia }, v)));
+    const motivoReal = h("input", { type: "text", id: "dv-motivo", maxlength: "200", placeholder: "Ex.: arrependimento, defeito, produto errado", value: d.motivoReal || "" });
+    const confObs = h("textarea", { id: "dv-obs", rows: "2", maxlength: "1000", placeholder: "Estado da caixa e do produto, o que faltou, etc." }, d.conferenciaObs || "");
+    const confMsg = h("p", { class: "msg-ok oculto", role: "status" });
+    const formConf = h("form", { class: "acao", novalidate: true },
+      h("h3", {}, "Conferência do produto"),
+      d.conferidaPor ? h("p", { class: "aviso" }, `Conferido por ${d.conferidaPor} em ${fmt(d.conferidaEm)}.`) : null,
+      h("label", { for: "dv-conf" }, "Como o produto voltou"), confSel,
+      h("label", { for: "dv-motivo" }, "Motivo real da devolução ", h("span", { class: "dica" }, "(para os números)")), motivoReal,
+      h("label", { for: "dv-obs" }, "Observações"), confObs, confMsg,
+      h("button", { type: "submit", class: "sec mini" }, "Salvar conferência"));
+    formConf.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { conferencia: confSel.value || null, conferenciaObs: confObs.value, motivoReal: motivoReal.value });
+      if (r.ok) await recarregar(); else { confMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(confMsg, true); }
+    });
+
+    // Custos
+    const c = d.custos;
+    const campo = (id, rot, v, dica) => [h("label", { for: id }, rot, dica ? h("span", { class: "dica" }, " " + dica) : null), h("input", { type: "text", id, inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(v) })];
+    const [lFrete, iFrete] = campo("dv-frete", "Frete da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
+    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda);
+    const [lOutros, iOutros] = campo("dv-outros", "Outros custos (R$)", c.outros);
+    const [lReemb, iReemb] = campo("dv-reemb", "Valor reembolsado ao comprador (R$)", c.reembolso, c.reembolsoOrigem === "estimado" ? "(estimado pelo valor dos produtos; informativo, não entra no custo)" : "(informativo, não entra no custo)");
+    const [lRec, iRec] = campo("dv-rec", "Recuperado com o Mercado Livre (R$)", c.recuperado, "(desconta do custo)");
+    const custoMsg = h("p", { class: "msg-ok oculto", role: "status" });
+    const formCusto = h("form", { class: "acao", novalidate: true },
+      h("h3", {}, "Custos da devolução"),
+      h("p", { class: "aviso" }, `Custo total: ${c.total != null ? reaisTxt(c.total) : "ainda não lançado"} (frete + produto perdido + outros − recuperado).`),
+      lFrete, iFrete, lPerda, iPerda, lOutros, iOutros, lReemb, iReemb, lRec, iRec, custoMsg,
+      h("button", { type: "submit", class: "sec mini" }, "Salvar custos"));
+    formCusto.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const v = { frete: lerReais(iFrete.value), perda: lerReais(iPerda.value), outros: lerReais(iOutros.value), reembolso: lerReais(iReemb.value), recuperado: lerReais(iRec.value) };
+      if (Object.values(v).some((x) => Number.isNaN(x))) { custoMsg.textContent = "Valor inválido. Use, por exemplo, 49,90."; mostrar(custoMsg, true); return; }
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, v);
+      if (r.ok) await recarregar(); else { custoMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(custoMsg, true); }
+    });
+
+    return h("div", { class: "faixa ml-info devolucao" },
+      h("h3", {}, "Devolução"), h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
+      faixaLiberar, links, msgTopo, formConf, formCusto, blocoContestacao(o, recarregar));
+  }
+
+  function blocoContestacao(o, recarregar) {
+    const d = o.devolucao;
+    const ct = d.contestacao;
+    if (ct.status) {
+      const resSel = h("select", { id: "dv-res", "aria-label": "Resultado da contestação" },
+        h("option", { value: "" }, "Em andamento"), h("option", { value: "ganha", selected: ct.status === "ganha" }, "Ganhamos"), h("option", { value: "perdida", selected: ct.status === "perdida" }, "Perdemos"));
+      const msg = h("p", { class: "msg-ok oculto", role: "status" });
+      const f = h("form", { class: "acao", novalidate: true },
+        h("h3", {}, "Contestação"),
+        h("p", { class: "aviso" }, `Enviada em ${fmt(ct.em)} por ${ct.por || "—"}: ${ct.motivo}.`), ct.mensagem ? h("p", { class: "relato" }, ct.mensagem) : null,
+        h("label", { for: "dv-res" }, "Resultado ", h("span", { class: "dica" }, "(quando o Mercado Livre decidir; informe o valor recuperado nos custos)")), resSel, msg,
+        h("button", { type: "submit", class: "sec mini" }, "Salvar resultado"));
+      f.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { contestacaoResultado: resSel.value || null });
+        if (r.ok) await recarregar(); else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
+      });
+      return f;
+    }
+    if (!d.podeContestar) {
+      return d.status === "recebida" || d.status === "conferida"
+        ? h("p", { class: "aviso" }, "Contestação: o Mercado Livre ainda não liberou essa opção para esta devolução. Use \"Atualizar do Mercado Livre\" depois que ele terminar a conferência dele.") : null;
+    }
+    const sel = h("select", { id: "dv-ct-motivo" }, h("option", { value: "" }, "Escolha o motivo…"),
+      MOTIVOS_CONTESTACAO.map((m) => h("option", { value: m.id, selected: m.conf && m.conf === d.conferencia }, m.nome + (m.foto ? " (exige foto)" : ""))));
+    const txt = h("textarea", { id: "dv-ct-msg", rows: "3", maxlength: "1000", placeholder: "Explique o que aconteceu com o produto devolvido." });
+    const fotos = h("input", { type: "file", id: "dv-ct-fotos", accept: "image/jpeg,image/png,image/webp", multiple: true });
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    const f = h("form", { class: "acao", novalidate: true },
+      h("h3", {}, "Contestar no Mercado Livre"),
+      h("p", { class: "aviso" }, "Use quando o produto voltou com problema. Vai direto ao Mercado Livre, com as fotos de prova. Só dá para enviar uma vez."),
+      h("label", { for: "dv-ct-motivo" }, "Motivo"), sel,
+      h("label", { for: "dv-ct-msg" }, "Mensagem"), txt,
+      h("label", { for: "dv-ct-fotos" }, "Fotos de prova ", h("span", { class: "dica" }, "(até 5, JPG, PNG ou WebP, 5 MB cada)")), fotos, msg,
+      h("button", { type: "submit", class: "mini" }, "Enviar contestação"));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!sel.value) { msg.textContent = "Escolha o motivo."; mostrar(msg, true); return; }
+      if (txt.value.trim().length < 5) { msg.textContent = "Explique o problema em poucas palavras."; mostrar(msg, true); return; }
+      if (!window.confirm("Enviar a contestação ao Mercado Livre? Não dá para desfazer.")) return;
+      const btn = f.querySelector("button[type=submit]"); btn.disabled = true;
+      const fd = new FormData();
+      fd.append("motivo", sel.value); fd.append("mensagem", txt.value);
+      for (const arq of fotos.files) fd.append("fotos", arq);
+      const res = await fetch(`/api/admin/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao/contestar`, {
+        method: "POST", credentials: "same-origin", headers: { "x-requested-with": "painel" }, body: fd,
+      });
+      const j = await res.json().catch(() => ({}));
+      btn.disabled = false;
+      if (res.ok) await recarregar(); else { msg.textContent = j.erro || "Não foi possível enviar."; mostrar(msg, true); }
+    });
+    return f;
   }
 
   // ---------- Mercado Livre (equipe) ----------
@@ -649,6 +839,14 @@
   });
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });
+  let esperaDev;
+  $("#dv-busca").addEventListener("input", (e) => {
+    clearTimeout(esperaDev);
+    esperaDev = setTimeout(() => { estado.devFiltro.q = e.target.value.trim(); estado.devFiltro.pagina = 1; carregarDevolucoes(); }, 300);
+  });
+  $("#dv-status").addEventListener("change", (e) => { estado.devFiltro.status = e.target.value; estado.devFiltro.pagina = 1; carregarDevolucoes(); });
+  $("#dv-ant").addEventListener("click", () => { estado.devFiltro.pagina--; carregarDevolucoes(); });
+  $("#dv-prox").addEventListener("click", () => { estado.devFiltro.pagina++; carregarDevolucoes(); });
 
   $("#f-usuario").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -723,6 +921,7 @@
   });
   window.addEventListener("hashchange", () => { if (estado.eu && estado.aba === "ocorrencias") abrirDoHash(); });
   setInterval(() => { if (estado.eu && estado.aba === "ocorrencias" && document.visibilityState === "visible") carregarLista(); }, 60000);
+  setInterval(() => { if (estado.eu && estado.aba === "devolucoes" && document.visibilityState === "visible") carregarDevolucoes(); }, 60000);
 
   // ---------- início ----------
   (async function iniciar() {

@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.8.0 — 2026-10-28
+
+Devoluções do Mercado Livre: acompanhar, conferir, lançar custos e contestar.
+
+- **Importação automática**: reclamações do Mercado Livre que têm devolução ganham um registro de devolução (a cada ciclo de sincronização). Vem do ML: situação, tipo (total ou parcial), rastreio, previsão de chegada, datas de envio e recebimento e a situação do dinheiro. O frete da devolução vem de `/shipments/{id}/costs`.
+- **Status da devolução**: Aguardando liberação, Liberada, Em trânsito, Não chegou, Recebida (a conferir), Conferida, Em contestação, Encerrada e Cancelada. Cada mudança entra no histórico da ocorrência.
+- **Liberação**: a documentação pública do ML não traz endpoint para o vendedor liberar a devolução. A Central avisa quando a ação está pendente e leva direto ao pedido no Mercado Livre ("Liberar no Mercado Livre"); o status muda sozinho quando o ML confirmar.
+- **Conferência**: a equipe registra como o produto voltou (bom estado, danificado, incompleto, diferente, caixa sem produto, outro), o motivo real da devolução e observações.
+- **Custos por devolução**: frete (do ML, ou digitado), produto perdido ou danificado, outros custos e valor recuperado na contestação. Custo total = frete + produto perdido + outros − recuperado. O valor reembolsado ao comprador é só informativo (estimado pelo valor dos produtos nas devoluções totais) e não entra no custo.
+- **Contestação dentro da Central**: quando o ML libera a ação, a equipe escolhe o motivo, escreve a mensagem e anexa até 5 fotos (JPG, PNG ou WebP). Vai direto ao Mercado Livre e fica no histórico; depois se registra se foi ganha ou perdida. Só uma contestação por devolução.
+- **Aba Devoluções**: fila com as que pedem ação primeiro (aguardando liberação, recebidas a conferir, não chegaram), busca por protocolo, pedido, comprador ou rastreio, e filtro por status. A lista de ocorrências ganhou o selo "DEV".
+- **Avisos**: Telegram para devolução nova, aguardando liberação, recebida (conferir) e que não chegou. O resumo diário inclui devoluções a liberar e a conferir. O prazo de liberação entra nos alertas de prazo que já existiam.
+- **Gerente IA**: lê devoluções (`GET /devolucoes` e o campo `devolucao` do detalhe). Conferir, lançar custos, atualizar e contestar são só para pessoas.
+- Arrumação: o acesso à API do ML (erros, tokens, renovação, `ml()`) foi para `src/ml-api.ts`; `src/ml.ts` continua com as reclamações.
+- Testes novos para a leitura das respostas do ML, o cálculo de status, a importação, a conferência, os custos e a contestação (com o Mercado Livre simulado).
+- Fica para a v1.9.0: painel de números das devoluções (motivos, custo por mês e por produto, taxa de contestação ganha, tempo médio) e cadastro manual de devoluções de Shopee, TikTok Shop e loja própria.
+- Atenção: as respostas de devolução e de custo do ML vêm de documentação que varia entre países. Depois do deploy, confira uma devolução real (use "Atualizar do Mercado Livre") e, se algum campo vier vazio, me envie o registro para ajustar.
+
 ## v1.7.0 — 2026-10-26
 
 Produto e foto pelo Tiny e responsável pela ocorrência.

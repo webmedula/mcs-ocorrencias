@@ -216,3 +216,50 @@ CREATE TABLE IF NOT EXISTS pesquisas (
 if (!(db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).some((c) => c.name === "responsavel_id"))
   db.exec("ALTER TABLE ocorrencias ADD COLUMN responsavel_id INTEGER");
 db.exec("CREATE INDEX IF NOT EXISTS idx_oc_responsavel ON ocorrencias(responsavel_id)");
+
+// ---------- v1.8.0: devoluções do Mercado Livre ----------
+db.exec(`
+CREATE TABLE IF NOT EXISTS devolucoes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ocorrencia_id INTEGER NOT NULL UNIQUE REFERENCES ocorrencias(id) ON DELETE CASCADE,
+  origem TEXT NOT NULL DEFAULT 'ml',
+  claim_id TEXT,
+  return_id TEXT,
+  status TEXT NOT NULL DEFAULT 'aguardando_liberacao',
+  ml_status TEXT,
+  ml_subtype TEXT,
+  ml_tipo TEXT,
+  dinheiro TEXT,
+  envio_id TEXT,
+  envio_status TEXT,
+  rastreio TEXT,
+  previsao_em TEXT,
+  aberta_em TEXT,
+  enviada_em TEXT,
+  recebida_em TEXT,
+  fechada_em TEXT,
+  reembolso_em TEXT,
+  acoes_json TEXT,
+  motivo_real TEXT,
+  conferencia TEXT,
+  conferencia_obs TEXT,
+  conferida_por TEXT,
+  conferida_em TEXT,
+  frete_centavos INTEGER,
+  frete_origem TEXT,
+  perda_centavos INTEGER,
+  outros_centavos INTEGER,
+  reembolso_centavos INTEGER,
+  reembolso_origem TEXT,
+  recuperado_centavos INTEGER,
+  contestacao_status TEXT,
+  contestacao_motivo TEXT,
+  contestacao_mensagem TEXT,
+  contestacao_em TEXT,
+  contestacao_por TEXT,
+  ml_json TEXT,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dev_status ON devolucoes(status);
+`);

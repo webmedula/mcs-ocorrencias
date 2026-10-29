@@ -2,7 +2,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { z } from "zod";
-import { CANAIS, DESFECHOS, STATUS, TIPOS, config, type Desfecho, type Status } from "./config.js";
+import { CANAIS, CONFERENCIAS, DESFECHOS, STATUS, STATUS_DEVOLUCAO, TIPOS, config, type Conferencia, type Desfecho, type Status } from "./config.js";
 import { dataLocal, gerarCsv, reais } from "./csv.js";
 import { pastaProdutos } from "./produtos.js";
 import { db } from "./db.js";
@@ -18,7 +18,11 @@ import QRCode from "qrcode";
 import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
 import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
-import { MlErro, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import { MlErro, atualizarOcorrenciaMl, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import multer from "multer";
+import {
+  MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
+} from "./devolucoes.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
 export const admin = express.Router();
@@ -174,6 +178,7 @@ admin.get("/ocorrencias", (req, res) => {
     .prepare(
       `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em, produto_json,
               responsavel_id, (SELECT u.nome FROM usuarios u WHERE u.id = o.responsavel_id) AS responsavel,
+              (SELECT d.status FROM devolucoes d WHERE d.ocorrencia_id = o.id) AS devolucao,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos
        FROM ocorrencias o ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ? OFFSET ?`,
     )
@@ -242,7 +247,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id) });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -401,6 +406,100 @@ admin.post("/ocorrencias/:protocolo/ml/mensagem", async (req, res) => {
     res.status(201).json({ ok: true, destinatario: r.destinatario });
   } catch (e) {
     return erroMl(res, e);
+  }
+});
+
+// ---------- Devoluções do Mercado Livre (v1.8.0) ----------
+const erroDev = (res: express.Response, e: unknown) => {
+  if (e instanceof MlErro) return res.status(e.status >= 400 && e.status < 600 && e.status !== 401 ? e.status : 502).json({ erro: e.message });
+  throw e;
+};
+
+// Fila da equipe: todas as devoluções, as que pedem ação primeiro. O Gerente IA também lê.
+admin.get("/devolucoes", (req, res) => {
+  const pagina = Math.max(1, Number(req.query.pagina) || 1);
+  res.json({
+    ...listarDevolucoes({ status: String(req.query.status ?? ""), q: String(req.query.q ?? ""), pagina, porPagina: 25 }),
+    conferencias: CONFERENCIAS,
+  });
+});
+
+admin.get("/ocorrencias/:protocolo/devolucao", (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  const d = devolucaoDa(o.id);
+  if (!d) return res.status(404).json({ erro: "Esta ocorrência não tem devolução." });
+  res.json(d);
+});
+
+const valor = z.number({ invalid_type_error: "Valor inválido." }).min(0, "O valor não pode ser negativo.").max(1_000_000, "Valor alto demais.").nullable().optional();
+const conferenciaKeys = Object.keys(CONFERENCIAS) as [Conferencia, ...Conferencia[]];
+
+// Conferência do produto, motivo real e custos: só pessoas
+admin.patch("/ocorrencias/:protocolo/devolucao", soPessoas, (req, res) => {
+  const p = z
+    .object({
+      conferencia: z.enum(conferenciaKeys, { errorMap: () => ({ message: "Conferência inválida." }) }).nullable().optional(),
+      conferenciaObs: z.string().trim().max(1000).nullable().optional(),
+      motivoReal: z.string().trim().max(200).nullable().optional(),
+      frete: valor, perda: valor, outros: valor, reembolso: valor, recuperado: valor,
+      contestacaoResultado: z.enum(["ganha", "perdida"]).nullable().optional(),
+    })
+    .safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  try {
+    res.json(atualizarDevolucao(o.id, p.data, nomeDoAtor(req.ator!)));
+  } catch (e) {
+    return erroDev(res, e);
+  }
+});
+
+// Reconsulta o ML agora
+admin.post("/ocorrencias/:protocolo/devolucao/atualizar", soPessoas, async (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml") return res.status(400).json({ erro: "Esta ocorrência não veio do Mercado Livre." });
+  try {
+    await atualizarOcorrenciaMl(o);
+    res.json(devolucaoDa(o.id));
+  } catch (e) {
+    return erroDev(res, e);
+  }
+});
+
+admin.get("/ocorrencias/:protocolo/devolucao/motivos", (_req, res) => res.json(MOTIVOS_CONTESTACAO));
+
+// Contestação (produto voltou com problema): motivo, mensagem e fotos de prova. Só pessoas.
+const fotosProva = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 5, fields: 10 },
+  fileFilter: (_req, file, cb) => (["image/jpeg", "image/png", "image/webp"].includes(file.mimetype) ? cb(null, true) : cb(new Error("TIPO_INVALIDO"))),
+}).array("fotos", 5);
+
+admin.post("/ocorrencias/:protocolo/devolucao/contestar", soPessoas, (req, res, next) => {
+  fotosProva(req, res, (err: unknown) => {
+    if (!err) return next();
+    const msg = err instanceof multer.MulterError ? "As fotos podem ter até 5 MB cada, no máximo 5 fotos."
+      : (err as Error)?.message === "TIPO_INVALIDO" ? "Envie apenas fotos JPG, PNG ou WebP." : "Não foi possível ler as fotos.";
+    res.status(400).json({ erro: msg });
+  });
+}, async (req, res) => {
+  const p = z.object({ motivo: z.string().max(10), mensagem: z.string().trim().min(5, "Explique o problema em poucas palavras.").max(1000) }).safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml") return res.status(400).json({ erro: "Esta ocorrência não veio do Mercado Livre." });
+  const a = req.ator!;
+  if (!dentroDoLimite(`contestar:${a.tipo}:${a.id}`, 30)) return res.status(429).json({ erro: "Muitas contestações na última hora. Aguarde um pouco." });
+  const fotos = ((req.files as Express.Multer.File[] | undefined) ?? []).map((f) => ({ buffer: f.buffer, mimetype: f.mimetype, originalname: f.originalname }));
+  try {
+    await contestarDevolucao(o, p.data.motivo, p.data.mensagem, fotos, nomeDoAtor(a));
+    registrar("devolucao_contestada", { usuarioId: (a as { id: number }).id, detalhe: o.protocolo, req });
+    res.status(201).json(devolucaoDa(o.id));
+  } catch (e) {
+    return erroDev(res, e);
   }
 });
 

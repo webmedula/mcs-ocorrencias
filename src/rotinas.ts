@@ -73,6 +73,8 @@ export function montarResumo() {
     ),
     vencidas: n("SELECT COUNT(*) n FROM ocorrencias WHERE origem = 'ml' AND status != 'resolvida' AND prazo_em IS NOT NULL AND julianday(prazo_em) <= julianday('now')"),
     paradas: n("SELECT COUNT(*) n FROM ocorrencias WHERE status IN ('nova','em_analise') AND atualizado_em < datetime('now','-2 days')"),
+    devolucoesLiberar: n("SELECT COUNT(*) n FROM devolucoes WHERE status = 'aguardando_liberacao'"),
+    devolucoesConferir: n("SELECT COUNT(*) n FROM devolucoes WHERE status = 'recebida'"),
   };
 }
 
@@ -87,6 +89,8 @@ export async function enviarResumo(): Promise<void> {
   if (r.vencendo) linhas.push(`⏰ Mercado Livre com prazo em menos de 24 h: <b>${r.vencendo}</b>`);
   if (r.vencidas) linhas.push(`🚨 Mercado Livre com prazo vencido: <b>${r.vencidas}</b>`);
   if (r.paradas) linhas.push(`🐢 Paradas há mais de 2 dias (novas/em análise): ${r.paradas}`);
+  if (r.devolucoesLiberar) linhas.push(`↩️ Devoluções aguardando liberação: <b>${r.devolucoesLiberar}</b>`);
+  if (r.devolucoesConferir) linhas.push(`📦 Devoluções recebidas para conferir: <b>${r.devolucoesConferir}</b>`);
   linhas.push(`<a href="${esc(config.publicUrl + "/painel")}">Abrir o painel</a>`);
   await enviarTelegram(linhas.join("\n"));
 }
