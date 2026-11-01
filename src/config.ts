@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.8.2",
+  version: "1.9.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -64,6 +64,8 @@ export const config = {
   mlPollMinutes: Math.max(1, Number(env.ML_POLL_MINUTES ?? 3)),
   mlAuthBase: env.ML_AUTH_BASE ?? "https://auth.mercadolivre.com.br",
   mlApiBase: env.ML_API_BASE ?? "https://api.mercadolibre.com",
+  // Faturamento do ML (v1.9.0): páginas de 1000 lançamentos baixadas por rodada; 0 desliga
+  faturamentoPaginas: Math.max(0, Number(env.FATURAMENTO_PAGINAS ?? 20)),
 };
 
 export const CANAIS = {

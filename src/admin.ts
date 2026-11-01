@@ -23,6 +23,7 @@ import multer from "multer";
 import {
   MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
 } from "./devolucoes.js";
+import { PENDENCIAS_ML, contaDa, editarConta, sincronizarFaturamento, statusFaturamento, type PendenciaMl } from "./conta.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
 export const admin = express.Router();
@@ -152,11 +153,15 @@ function filtroLista(query: express.Request["query"], ator: Ator) {
   const canal = String(query.canal ?? "");
   const status = String(query.status ?? "");
   const origem = String(query.origem ?? "");
+  const pendencia = String(query.pendencia ?? "");
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (canal in CANAIS) { where.push("canal = ?"); args.push(canal); }
   if (status in STATUS) { where.push("status = ?"); args.push(status); }
   if (origem === "ml" || origem === "formulario") { where.push("origem = ?"); args.push(origem); }
+  // Pendência com o Mercado Livre (v1.9.0): "aguardando", "creditou", "negou" ou "alguma" (qualquer uma registrada)
+  if (pendencia in PENDENCIAS_ML && pendencia !== "nenhuma") { where.push("id IN (SELECT ocorrencia_id FROM conta_venda WHERE pendencia_ml = ?)"); args.push(pendencia); }
+  else if (pendencia === "alguma") where.push("id IN (SELECT ocorrencia_id FROM conta_venda WHERE pendencia_ml != 'nenhuma')");
   // Responsável: "eu" (quem está logado), "nenhum" ou o id de alguém da equipe
   if (responsavel === "eu" && ator.tipo === "usuario") { where.push("responsavel_id = ?"); args.push(ator.id); }
   else if (responsavel === "nenhum") where.push("responsavel_id IS NULL");
@@ -179,6 +184,7 @@ admin.get("/ocorrencias", (req, res) => {
       `SELECT protocolo, canal, pedido, tipo, nome, email, status, tiny_status, origem, prazo_em, criado_em, atualizado_em, produto_json,
               responsavel_id, (SELECT u.nome FROM usuarios u WHERE u.id = o.responsavel_id) AS responsavel,
               (SELECT d.status FROM devolucoes d WHERE d.ocorrencia_id = o.id) AS devolucao,
+              (SELECT c.pendencia_ml FROM conta_venda c WHERE c.ocorrencia_id = o.id) AS pendencia_ml,
               (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos
        FROM ocorrencias o ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ? OFFSET ?`,
     )
@@ -193,7 +199,8 @@ admin.get("/ocorrencias", (req, res) => {
     contagem[r.status] = r.n;
     // Quem pode ser responsável (pessoas ativas), para os filtros e o seletor do detalhe
   const equipe = db.prepare("SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome").all();
-  res.json({ itens, total, pagina, porPagina, contagem, canais: CANAIS, tipos: TIPOS, status: STATUS, desfechos: DESFECHOS, equipe });
+  const pendencias = (db.prepare("SELECT COUNT(*) n FROM conta_venda WHERE pendencia_ml = 'aguardando'").get() as { n: number }).n;
+  res.json({ itens, total, pagina, porPagina, contagem, pendencias, canais: CANAIS, tipos: TIPOS, status: STATUS, desfechos: DESFECHOS, pendenciasMl: PENDENCIAS_ML, equipe });
 });
 
 // Exportação da lista em CSV, com os mesmos filtros (v1.6.0). Tem dados pessoais: só pessoas, e fica no registro.
@@ -202,22 +209,34 @@ admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
   const { cond, args } = filtroLista(req.query, req.ator!);
   const linhas = db
     .prepare(
-      `SELECT o.protocolo, o.criado_em, o.origem, o.canal, o.pedido, o.tipo, o.status, o.nome, o.email, o.telefone,
+      `SELECT o.id, o.protocolo, o.criado_em, o.origem, o.canal, o.pedido, o.tipo, o.status, o.nome, o.email, o.telefone,
               o.desfecho, o.custo_centavos, o.resolvida_em, o.prazo_em, o.tiny_status, o.atualizado_em,
               (SELECT u.nome FROM usuarios u WHERE u.id = o.responsavel_id) AS responsavel,
-              (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos, p.nota
-       FROM ocorrencias o LEFT JOIN pesquisas p ON p.ocorrencia_id = o.id
+              (SELECT COUNT(*) FROM anexos a WHERE a.ocorrencia_id = o.id) AS fotos, p.nota,
+              (SELECT d.status FROM devolucoes d WHERE d.ocorrencia_id = o.id) AS devolucao,
+              (SELECT COALESCE(d.frete_centavos,0) + COALESCE(d.perda_centavos,0) + COALESCE(d.outros_centavos,0) - COALESCE(d.recuperado_centavos,0)
+                 FROM devolucoes d WHERE d.ocorrencia_id = o.id) AS custo_devolucao, c.pendencia_ml, c.reputacao_afetada
+       FROM ocorrencias o LEFT JOIN pesquisas p ON p.ocorrencia_id = o.id LEFT JOIN conta_venda c ON c.ocorrencia_id = o.id
        ${cond} ORDER BY o.criado_em DESC, o.id DESC LIMIT ?`,
     )
     .all(...args, LIMITE_CSV) as any[];
+  const contas = new Map<number, any>();
+  for (const o of linhas) if (o.pendencia_ml != null || o.origem === "ml") { const c = contaDa(o.id); if (c) contas.set(o.id, c); }
+  const r2 = (v: number | null | undefined) => (v == null ? "" : v.toFixed(2).replace(".", ","));
   const csv = gerarCsv(
     ["Protocolo", "Aberta em", "Origem", "Canal", "Pedido", "Assunto", "Status", "Responsável", "Cliente", "E-mail", "Telefone", "Fotos",
-      "Desfecho", "Custo (R$)", "Resolvida em", "Prazo ML", "Nota (1-5)", "Tiny", "Atualizada em"],
+      "Desfecho", "Custo (R$)", "Resolvida em", "Prazo ML", "Nota (1-5)", "Tiny", "Atualizada em",
+      "Devolução", "Custo devolução (R$)", "Preço produto (R$)", "Tarifa venda (R$)", "Frete ida (R$)", "Etiqueta devolução (R$)", "Reembolso comprador (R$)",
+      "Créditos ML (R$)", "Custo produto (R$)", "Total ML (R$)", "Resultado MCS (R$)", "Pendência ML", "Reputação afetada"],
     linhas.map((o) => [
       o.protocolo, dataLocal(o.criado_em), o.origem === "ml" ? "Mercado Livre (reclamação)" : "Formulário", CANAIS[o.canal as keyof typeof CANAIS] ?? o.canal,
       o.pedido, TIPOS[o.tipo as keyof typeof TIPOS] ?? o.tipo, STATUS[o.status as Status] ?? o.status, o.responsavel, o.nome, o.email, o.telefone, o.fotos,
       o.desfecho ? DESFECHOS[o.desfecho as Desfecho] ?? o.desfecho : "", reais(o.custo_centavos), dataLocal(o.resolvida_em), dataLocal(o.prazo_em),
       o.nota ?? "", o.tiny_status, dataLocal(o.atualizado_em),
+      o.devolucao ? STATUS_DEVOLUCAO[o.devolucao as keyof typeof STATUS_DEVOLUCAO] ?? o.devolucao : "", o.devolucao ? reais(o.custo_devolucao) : "",
+      r2(contas.get(o.id)?.preco), r2(contas.get(o.id)?.tarifa), r2(contas.get(o.id)?.freteIda), r2(contas.get(o.id)?.etiqueta), r2(contas.get(o.id)?.reembolso),
+      r2(contas.get(o.id)?.creditos), r2(contas.get(o.id)?.custoProduto), r2(contas.get(o.id)?.totalMl), r2(contas.get(o.id)?.resultado),
+      o.pendencia_ml ? PENDENCIAS_ML[o.pendencia_ml as PendenciaMl] ?? o.pendencia_ml : "", o.reputacao_afetada == null ? "" : o.reputacao_afetada ? "Sim" : "Não",
     ]),
   );
   registrar("lista_exportada", { usuarioId: (req.ator as { id: number }).id, detalhe: `${linhas.length} ocorrência(s)`, req });
@@ -247,7 +266,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id) });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" ? contaDa(o.id) : null });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -518,6 +537,31 @@ admin.get("/ocorrencias/:protocolo/ml/financeiro-bruto", soGerente, async (req, 
   }
 });
 
+// ---------- Conta da venda (v1.9.0) ----------
+const pendenciaKeys = Object.keys(PENDENCIAS_ML) as [PendenciaMl, ...PendenciaMl[]];
+admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
+  const p = z
+    .object({
+      custoProduto: valor,
+      etiquetaPrevista: valor,
+      pendencia: z.enum(pendenciaKeys, { errorMap: () => ({ message: "Pendência inválida." }) }).optional(),
+      pendenciaObs: z.string().trim().max(500).nullable().optional(),
+      reputacaoAfetada: z.boolean().nullable().optional(),
+    })
+    .safeParse(req.body);
+  if (!p.success) return invalido(res, p.error);
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml") return res.status(400).json({ erro: "A conta da venda só existe para ocorrências do Mercado Livre." });
+  res.json(editarConta(o.id, p.data, nomeDoAtor(req.ator!)));
+});
+
+admin.get("/ml/faturamento", soGerente, (_req, res) => res.json(statusFaturamento()));
+admin.post("/ml/faturamento/sincronizar", soGerente, async (_req, res) => {
+  const r = await sincronizarFaturamento();
+  res.json({ ...r, ...statusFaturamento() });
+});
+
 admin.get("/ml/status", soGerente, (_req, res) => res.json(statusConexao()));
 
 admin.post("/ml/conectar", soGerente, (req, res) => {
@@ -718,9 +762,44 @@ admin.get("/estatisticas", (req, res) => {
     porTipo: rows("SELECT tipo k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY tipo ORDER BY n DESC", desde),
     porOrigem: rows("SELECT origem k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now', ?) GROUP BY origem", desde),
     porSemana: rows("SELECT strftime('%Y-%m-%d', criado_em, '-6 days', 'weekday 1') k, COUNT(*) n FROM ocorrencias WHERE criado_em >= datetime('now','-56 days') GROUP BY k ORDER BY k"),
+    // Conta da venda (v1.9.0): quanto as reclamações do ML custaram, por mês, produto e motivo
+    contaMl: {
+      casos: um(`SELECT COUNT(*) n FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)`, desde).n,
+      ...contaTotais(desde),
+      porMes: rows(
+        `SELECT strftime('%Y-%m', o.criado_em) k, COUNT(*) n, ${EXPR_CUSTO} custo FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id
+         WHERE o.criado_em >= datetime('now','-365 days') GROUP BY k ORDER BY k`),
+      porProduto: rows(
+        `SELECT COALESCE(json_extract(o.produto_json, '$[0].titulo'), 'Sem produto') k, COUNT(*) n, ${EXPR_CUSTO} custo
+         FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?) GROUP BY k ORDER BY custo DESC LIMIT 10`, desde),
+      porMotivo: rows(
+        `SELECT o.tipo k, COUNT(*) n, ${EXPR_CUSTO} custo FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id
+         WHERE o.criado_em >= datetime('now', ?) GROUP BY k ORDER BY custo DESC`, desde),
+      pendencias: rows("SELECT pendencia_ml k, COUNT(*) n FROM conta_venda GROUP BY k"),
+      reputacao: um("SELECT SUM(reputacao_afetada = 1) n FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)", desde).n ?? 0,
+    },
     canais: CANAIS, tipos: TIPOS, desfechos: DESFECHOS,
   });
 });
+
+// Custo do caso para a MCS, em reais: envios (ida + etiqueta) + reembolso + tarifa − preço... simplificado como o quadro do ML:
+// o que saiu do bolso = tarifa + envios + reembolso − preço (quando negativo, é prejuízo), mais custo do produto, menos créditos.
+const EXPR_CUSTO = `ROUND(SUM(
+  COALESCE(c.tarifa_centavos,0) + COALESCE(c.frete_ida_centavos,0)
+  + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'etiqueta_devolucao'), c.etiqueta_prevista_centavos, 0)
+  + COALESCE(c.reembolso_centavos,0) - COALESCE(c.preco_centavos,0) + COALESCE(c.custo_produto_centavos,0)
+  + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'credito'), 0)
+) / 100.0, 2)`;
+function contaTotais(desde: string) {
+  const r = db.prepare(
+    `SELECT ${EXPR_CUSTO} custo, ROUND(SUM(COALESCE(c.preco_centavos,0))/100.0,2) vendas,
+            ROUND(SUM(COALESCE(c.reembolso_centavos,0))/100.0,2) reembolsos,
+            ROUND(SUM(COALESCE(c.frete_ida_centavos,0) + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'etiqueta_devolucao'), c.etiqueta_prevista_centavos, 0))/100.0,2) envios,
+            ROUND(-SUM(COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'credito'), 0))/100.0,2) creditos
+     FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)`,
+  ).get(desde) as any;
+  return { custo: r?.custo ?? 0, vendas: r?.vendas ?? 0, reembolsos: r?.reembolsos ?? 0, envios: r?.envios ?? 0, creditos: r?.creditos ?? 0 };
+}
 
 // ---------- QR code por canal (v1.3.0) ----------
 admin.get("/qr", async (req, res) => {

@@ -183,3 +183,18 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .faixa.devolucao h3 { margin: 6px 0 2px; }
 .faixa.devolucao form.acao { background: #fff; border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
 .faixa.devolucao input[type="file"] { width: 100%; }
+
+/* Conta da venda (v1.9.0) */
+.sel-ml.pend { background: #ffd9d2; color: #8a2412; }
+.kpi.pendml { border-top-color: #c8412b; }
+.faixa.conta .conta-dl { display: grid; grid-template-columns: 1fr max-content; gap: 6px 14px; margin: 0; }
+.faixa.conta .conta-dl dt small { display: block; color: var(--suave); font-size: .75rem; }
+.faixa.conta .conta-dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.faixa.conta .conta-total { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.08); }
+.faixa.conta .conta-total span { display: block; font-size: .78rem; color: var(--suave); }
+.faixa.conta .conta-total b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.faixa.conta .neg { color: #8a2412; }
+.faixa.conta .pos { color: #15613c; }
+.faixa.conta form.acao { background: #fff; border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+.faixa.conta details.lanc { font-size: .85rem; }
+.faixa.conta details.lanc ul { margin: 6px 0 0; padding-left: 18px; }

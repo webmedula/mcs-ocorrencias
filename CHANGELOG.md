@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.9.0 — 2026-11-01
+
+Conta da venda: o que cada reclamação do Mercado Livre custou, com pendência com o ML e reputação.
+
+- **Quadro "Conta da venda"** em toda ocorrência do Mercado Livre, no formato do "Recebimento" do próprio ML: preço do produto, tarifa de venda, frete de ida pago pela MCS, etiqueta de devolução, reembolso ao comprador, créditos do ML e custo do produto perdido, com **Total no Mercado Livre** e **Resultado para a MCS**. Mostra também a situação do pagamento (retido, liberado, data prevista) e o líquido na conta.
+- De onde vem cada número: preço, tarifa e reembolso do pedido e do pagamento; frete de ida de `/shipments/{id}/costs`; etiqueta de devolução **prevista** pela mensagem do mediador ("o custo da etiqueta de devolução será de R$ …") e **confirmada** quando o lançamento aparece no faturamento; créditos (estornos, coberturas) do faturamento. O custo do produto é digitado pela equipe. Os campos de desfecho (v1.6) e de custos da devolução (v1.8) continuam separados, sem mudança.
+- **Faturamento do ML guardado na Central**: uma vez por dia a Central baixa os lançamentos do período aberto e do último fechado (páginas de 1000, limite por rodada em `FATURAMENTO_PAGINAS`) e os guarda por pedido. Na aba Equipe, o card do Mercado Livre mostra quantos lançamentos há e permite baixar agora.
+- **Pendência com o Mercado Livre**: sem pendência, aguardando retorno, ML creditou ou ML negou, com observação e data. Filtro "Pendência ML" na lista, selo "ML?" nas que aguardam, cartão "Aguardando retorno do ML" acima da lista e aviso no resumo diário (com as paradas há mais de 7 dias).
+- **Reputação afetada**: lida da mensagem do mediador e editável pela equipe (o que a equipe marcar vence).
+- **CSV** com as colunas da conta (preço, tarifa, frete de ida, etiqueta, reembolso, créditos, custo do produto, total ML, resultado MCS, pendência e reputação), além do status e do custo da devolução.
+- **Números**: bloco "Conta das reclamações do Mercado Livre" com custo total para a MCS, vendido, reembolsado, envios, créditos, reputação afetada e pendências, e gráficos de custo por mês, por produto e por assunto.
+- A conta é montada na importação da reclamação e atualizada a cada mudança; as com dinheiro ainda retido são reconsultadas sozinhas (10 por rodada de 10 min).
+- Gerente IA: lê a conta no detalhe (`conta`) e filtra por pendência; não edita.
+- Testes novos para a leitura do pedido, dos envios, da mensagem do mediador e do faturamento, e para o quadro completo (com a estrutura real das respostas do ML).
+- Nova variável (opcional): `FATURAMENTO_PAGINAS`.
+
 ## v1.8.2 — 2026-11-01
 
 Correções no diagnóstico financeiro e na leitura da devolução.

@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.8.2
+# Central de Ocorrências — v1.9.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.8.2** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.9.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -54,6 +54,7 @@ npm test                 # testes automáticos (banco temporário, nada é envia
 | `SMTP_*`, `MAIL_FROM` | E-mail de confirmação. Sem `SMTP_HOST`, só registra no log |
 | `IP_SALT` | Texto aleatório; o IP é guardado apenas como hash |
 | `DATA_DIR` | Pasta do banco e das fotos |
+| `FATURAMENTO_PAGINAS` | Páginas de 1000 lançamentos do faturamento do ML baixadas por rodada (padrão 20; `0` desliga) |
 
 **Identidade visual:** o logo da MCS Brasil está em `public/logo.png` (cabeçalho) e `public/favicon.png`. As cores ficam nas variáveis do topo de `public/style.css` (`--cor-marca`, `--cor-destaque`). Para trocar o logo, substitua os dois arquivos mantendo os nomes.
 

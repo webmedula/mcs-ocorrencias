@@ -6,6 +6,8 @@ import { avisarEquipeEmail, enviarTelegram, esc } from "./notify.js";
 import { aplicarRetencao } from "./lgpd.js";
 import { enviarPesquisasPendentes } from "./pesquisa.js";
 import { completarPendentesTiny } from "./produtos.js";
+import { completarContas } from "./ml.js";
+import { sincronizarFaturamento } from "./conta.js";
 
 /** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco.
  *  v1.6.0: pesquisa de satisfação das ocorrências resolvidas.
@@ -75,6 +77,8 @@ export function montarResumo() {
     paradas: n("SELECT COUNT(*) n FROM ocorrencias WHERE status IN ('nova','em_analise') AND atualizado_em < datetime('now','-2 days')"),
     devolucoesLiberar: n("SELECT COUNT(*) n FROM devolucoes WHERE status = 'aguardando_liberacao'"),
     devolucoesConferir: n("SELECT COUNT(*) n FROM devolucoes WHERE status = 'recebida'"),
+    pendenciasMl: n("SELECT COUNT(*) n FROM conta_venda WHERE pendencia_ml = 'aguardando'"),
+    pendenciasParadas: n("SELECT COUNT(*) n FROM conta_venda WHERE pendencia_ml = 'aguardando' AND pendencia_em < datetime('now','-7 days')"),
   };
 }
 
@@ -91,6 +95,7 @@ export async function enviarResumo(): Promise<void> {
   if (r.paradas) linhas.push(`🐢 Paradas há mais de 2 dias (novas/em análise): ${r.paradas}`);
   if (r.devolucoesLiberar) linhas.push(`↩️ Devoluções aguardando liberação: <b>${r.devolucoesLiberar}</b>`);
   if (r.devolucoesConferir) linhas.push(`📦 Devoluções recebidas para conferir: <b>${r.devolucoesConferir}</b>`);
+  if (r.pendenciasMl) linhas.push(`💰 Aguardando retorno do Mercado Livre: <b>${r.pendenciasMl}</b>${r.pendenciasParadas ? ` (${r.pendenciasParadas} há mais de 7 dias)` : ""}`);
   linhas.push(`<a href="${esc(config.publicUrl + "/painel")}">Abrir o painel</a>`);
   await enviarTelegram(linhas.join("\n"));
 }
@@ -136,6 +141,17 @@ async function backupSeFaltar(): Promise<void> {
   try { await fazerBackup(); } catch (e: any) { console.error("[backup] falhou:", e?.message); }
 }
 
+// ---------- Faturamento do ML (v1.9.0): uma vez por dia, de madrugada ou na primeira rodada do dia ----------
+async function faturamentoSeFaltar(): Promise<void> {
+  if (config.faturamentoPaginas <= 0 || !config.mlClientId) return;
+  const { data } = agoraLocal();
+  if (estado("faturamento_data") === data) return;
+  const r = await sincronizarFaturamento();
+  if (r.erro) return; // tenta de novo na próxima rodada
+  if (r.completo) gravarEstado("faturamento_data", data);
+  console.log(`[faturamento] ${r.lancamentos} lançamento(s) em ${r.paginas} página(s)${r.completo ? "" : " (continua na próxima rodada)"}.`);
+}
+
 // ---------- Agendador ----------
 let rodando = false;
 async function ciclo(): Promise<void> {
@@ -147,6 +163,8 @@ async function ciclo(): Promise<void> {
     await backupSeFaltar();
     await enviarPesquisasPendentes();
     await completarPendentesTiny();
+    await completarContas();
+    await faturamentoSeFaltar();
     aplicarRetencao();
   } catch (e: any) {
     console.error("[rotinas]", e?.message);

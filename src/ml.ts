@@ -9,6 +9,7 @@ import { gerarProtocolo } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
 import { guardarFoto, type Produto } from "./produtos.js";
 import { sincronizarDevolucao, precisaVerDevolucao } from "./devolucoes.js";
+import { atualizarContaVenda, contasPendentes } from "./conta.js";
 
 export function statusConexao() {
   const c = conexao();
@@ -195,14 +196,16 @@ async function sincronizarAgora(): Promise<ResultadoSync> {
   return res;
 }
 
-async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string; titulo: string | null; produtos: ProdutoMl[] }> {
+async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string; titulo: string | null; produtos: ProdutoMl[]; bruto: any | null }> {
   const rid = claim.resource_id != null ? String(claim.resource_id) : String(claim.id);
   let nome = "Comprador do Mercado Livre";
   let titulo: string | null = null;
   let produtos: ProdutoMl[] = [];
+  let bruto: any | null = null;
   if (claim.resource === "order" || claim.resource === undefined) {
     try {
       const o = await ml(`/orders/${encodeURIComponent(rid)}`);
+      bruto = o;
       nome = o?.buyer?.nickname || (o?.buyer?.id ? `Comprador ${o.buyer.id}` : nome);
       titulo = o?.order_items?.[0]?.item?.title ?? null;
       produtos = await produtosDoPedido(o);
@@ -210,7 +213,7 @@ async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string
       console.error(`[ml] não consegui ler o pedido ${rid}: ${e?.message}`);
     }
   }
-  return { pedido: rid, nome, titulo, produtos };
+  return { pedido: rid, nome, titulo, produtos, bruto };
 }
 
 async function motivoDe(reasonId: string | null): Promise<string | null> {
@@ -231,7 +234,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   if (!existente) {
     if (claim.status === "closed") return { nova: false, atualizada: false, mensagens: 0 }; // não importa histórico já encerrado
     const motivo = await motivoDe(claim.reason_id ?? null);
-    const { pedido, nome, titulo, produtos } = await dadosDoPedido(claim);
+    const { pedido, nome, titulo, produtos, bruto } = await dadosDoPedido(claim);
     const tiny = await buscarPedido(pedido);
     const msgs = await baixarMensagens(id);
     const primeira = msgs.find((m) => m.sender_role === "complainant")?.message;
@@ -268,6 +271,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
     })();
     const n = gravarMensagens(ocId, msgs);
     await sincronizarDevolucao(ocId, claim, vendedor);
+    if (bruto) await atualizarContaVenda(ocId, bruto, vendedor);
     await enviarTelegram(
       [
         "🟠 <b>Nova reclamação no Mercado Livre</b> " + `<code>${esc(protocolo)}</code>`,
@@ -298,6 +302,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   }
   // Devolução (v1.8.0): atualiza quando a reclamação mudou ou enquanto a devolução ainda anda
   if (mudou || precisaVerDevolucao(existente.id)) await sincronizarDevolucao(existente.id, claim, vendedor);
+  if (mudou && !existente.anonimizada) await atualizarConta(existente.id, existente.pedido, vendedor);
   if (claim.status === "closed" && existente.status !== "resolvida") {
     db.transaction(() => {
       db.prepare("UPDATE ocorrencias SET status = 'resolvida', resolvida_em = datetime('now'), prazo_em = NULL, atualizado_em = datetime('now') WHERE id = ?").run(existente.id);
@@ -394,6 +399,20 @@ export async function enviarMensagem(oc: any, texto: string, autor: string): Pro
   return { destinatario };
 }
 
+async function atualizarConta(ocId: number, pedido: string, vendedor: string): Promise<void> {
+  try { await atualizarContaVenda(ocId, await ml(`/orders/${encodeURIComponent(pedido)}`), vendedor); }
+  catch (e: any) { console.error(`[conta] pedido ${pedido}: ${e?.message}`); }
+}
+
+/** Reconsulta a conta de algumas ocorrências do ML por rodada (dinheiro ainda retido, ou conta antiga/inexistente). */
+export async function completarContas(max = 10): Promise<number> {
+  const c = conexao();
+  if (!c) return 0;
+  let n = 0;
+  for (const p of contasPendentes(max)) { await atualizarConta(p.id, p.pedido, c.user_id); n++; }
+  return n;
+}
+
 /** Relê uma reclamação agora (botão "Atualizar" da devolução). */
 export async function atualizarOcorrenciaMl(oc: any): Promise<void> {
   const c = conexao();
@@ -401,6 +420,7 @@ export async function atualizarOcorrenciaMl(oc: any): Promise<void> {
   const claim = await ml(`/post-purchase/v1/claims/${encodeURIComponent(String(oc.ml_claim_id))}`);
   await processarClaim(claim, c.user_id);
   await sincronizarDevolucao(oc.id, claim, c.user_id, true);
+  await atualizarConta(oc.id, oc.pedido, c.user_id);
 }
 
 /** Diagnóstico (v1.8.1): tudo que o ML entrega sobre o dinheiro de um pedido, sem tratamento.

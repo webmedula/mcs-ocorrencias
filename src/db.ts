@@ -263,3 +263,45 @@ CREATE TABLE IF NOT EXISTS devolucoes (
 );
 CREATE INDEX IF NOT EXISTS idx_dev_status ON devolucoes(status);
 `);
+
+// ---------- v1.9.0: conta da venda e faturamento do Mercado Livre ----------
+db.exec(`
+CREATE TABLE IF NOT EXISTS conta_venda (
+  ocorrencia_id INTEGER PRIMARY KEY REFERENCES ocorrencias(id) ON DELETE CASCADE,
+  preco_centavos INTEGER,
+  tarifa_centavos INTEGER,
+  frete_ida_centavos INTEGER,
+  etiqueta_prevista_centavos INTEGER,
+  reembolso_centavos INTEGER,
+  liquido_centavos INTEGER,
+  custo_produto_centavos INTEGER,
+  pagamento_status TEXT,
+  liberado INTEGER,
+  liberacao_em TEXT,
+  pendencia_ml TEXT NOT NULL DEFAULT 'nenhuma',
+  pendencia_obs TEXT,
+  pendencia_em TEXT,
+  reputacao_afetada INTEGER,
+  reputacao_origem TEXT,
+  ml_atualizado_em TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_conta_pendencia ON conta_venda(pendencia_ml);
+
+CREATE TABLE IF NOT EXISTS ml_faturamento (
+  detail_id TEXT PRIMARY KEY,
+  periodo TEXT NOT NULL,
+  pedido TEXT,
+  envio_id TEXT,
+  tipo TEXT NOT NULL,
+  subtipo TEXT,
+  descricao TEXT NOT NULL,
+  valor_centavos INTEGER NOT NULL,
+  bruto_centavos INTEGER,
+  data TEXT,
+  mercado TEXT,
+  categoria TEXT NOT NULL,
+  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fat_pedido ON ml_faturamento(pedido);
+CREATE INDEX IF NOT EXISTS idx_fat_data ON ml_faturamento(data);
+`);

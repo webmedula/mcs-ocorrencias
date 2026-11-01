@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.8.2 — painel interno
+// Central de Ocorrências v1.9.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -18,7 +18,7 @@
   ];
   const DINHEIRO = { retained: "Retido pelo Mercado Livre", refunded: "Reembolsado ao comprador", available: "Liberado para você" };
 
-  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", responsavel: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "", devFiltro: { q: "", status: "", pagina: 1 }, devMeta: null };
+  const estado = { eu: null, meta: null, filtro: { q: "", canal: "", status: "", origem: "", responsavel: "", pendencia: "", pagina: 1 }, aberto: null, aba: "ocorrencias", msgResp: "", devFiltro: { q: "", status: "", pagina: 1 }, devMeta: null };
 
   // ---------- utilidades ----------
   function h(tag, attrs, ...filhos) {
@@ -90,7 +90,7 @@
   // ---------- ocorrências ----------
   async function carregarLista() {
     const f = estado.filtro;
-    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel, pagina: String(f.pagina) });
+    const q = new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel, pendencia: f.pendencia, pagina: String(f.pagina) });
     const r = await api("GET", "/ocorrencias?" + q);
     if (!r.ok) return;
     const d = r.json;
@@ -102,7 +102,7 @@
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
         h("td", {}, o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
-          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null, o.devolucao ? h("span", { class: "sel-ml dev", title: "Tem devolução" }, "DEV") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null, o.devolucao ? h("span", { class: "sel-ml dev", title: "Tem devolução" }, "DEV") : null, o.pendencia_ml === "aguardando" ? h("span", { class: "sel-ml pend", title: "Aguardando retorno do Mercado Livre" }, "ML?") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -138,6 +138,13 @@
   function renderKpis(contagem) {
     const box = $("#kpis");
     box.replaceChildren();
+    const pend = estado.meta?.pendencias ?? 0;
+    if (pend || estado.filtro.pendencia === "aguardando") {
+      const b = h("button", { type: "button", class: `kpi pendml${estado.filtro.pendencia === "aguardando" ? " sel" : ""}`, "aria-pressed": String(estado.filtro.pendencia === "aguardando") },
+        "Aguardando retorno do ML", h("b", {}, String(pend)));
+      b.addEventListener("click", () => { estado.filtro.pendencia = estado.filtro.pendencia === "aguardando" ? "" : "aguardando"; estado.filtro.pagina = 1; $("#f-pendencia").value = estado.filtro.pendencia; carregarLista(); });
+      box.append(b);
+    }
     for (const k of ["nova", "em_analise", "aguardando_cliente", "resolvida"]) {
       const b = h("button", { type: "button", class: `kpi ${k}${estado.filtro.status === k ? " sel" : ""}`, "aria-pressed": String(estado.filtro.status === k) },
         STATUS_INT[k], h("b", {}, String(contagem[k] ?? 0)));
@@ -278,6 +285,7 @@
         ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
         : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
       ...(ehMl ? [blocoMl(o)] : []),
+      blocoConta(o),
       blocoDevolucao(o),
       blocoProdutos(o),
       tiny,
@@ -593,6 +601,71 @@
     return f;
   }
 
+  // ---------- conta da venda (v1.9.0) ----------
+  const PENDENCIA = { nenhuma: "Sem pendência", aguardando: "Aguardando retorno do Mercado Livre", creditou: "Mercado Livre creditou", negou: "Mercado Livre negou" };
+  const PAGTO = { in_mediation: "Em mediação (retido)", approved: "Aprovado", refunded: "Reembolsado ao comprador", partially_refunded: "Parcialmente reembolsado", charged_back: "Estornado (chargeback)", cancelled: "Cancelado" };
+  const sinal = (v) => (typeof v === "number" ? (v < 0 ? "−" : "") + reaisTxt(Math.abs(v)) : "—");
+
+  function blocoConta(o) {
+    const c = o.conta;
+    if (!c) return o.origem === "ml" ? h("p", { class: "aviso" }, "Conta da venda ainda não consultada no Mercado Livre. Ela é montada sozinha na próxima sincronização.") : null;
+    const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
+    const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
+    const linhas = [
+      ["Preço do produto", c.preco, ""],
+      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, ""],
+      ["Frete de ida (pago pela MCS)", c.freteIda == null ? null : -c.freteIda, ""],
+      ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
+      ["Reembolso ao comprador", c.reembolso == null ? null : -c.reembolso, ""],
+      ["Créditos do ML", c.creditos ? c.creditos : null, " (estornos e coberturas no faturamento)"],
+      ["Custo do produto perdido", c.custoProduto == null ? null : -c.custoProduto, " (lançado pela equipe)"],
+    ].filter((x) => x[1] != null);
+    const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null), h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
+    const total = h("div", { class: "conta-total" },
+      h("div", {}, h("span", {}, "Total no Mercado Livre"), h("b", { class: (c.totalMl ?? 0) < 0 ? "neg" : "pos" }, sinal(c.totalMl))),
+      h("div", {}, h("span", {}, "Resultado para a MCS"), h("b", { class: (c.resultado ?? 0) < 0 ? "neg" : "pos" }, sinal(c.resultado))));
+    const dinheiro = [
+      c.pagamentoStatus ? `Pagamento: ${PAGTO[c.pagamentoStatus] || c.pagamentoStatus}` : null,
+      c.liberado == null ? null : c.liberado ? "Dinheiro liberado" : `Dinheiro ainda não liberado${c.liberacaoEm ? ` (previsto ${fmt(c.liberacaoEm)})` : ""}`,
+      c.liquidoHoje != null ? `Líquido na conta hoje: ${reaisTxt(c.liquidoHoje)}` : null,
+      c.atualizadoEm ? `Atualizado do ML em ${fmt(c.atualizadoEm)}` : null,
+    ].filter(Boolean).join(" · ");
+    const reput = c.reputacaoAfetada == null ? null
+      : h("div", { class: "faixa " + (c.reputacaoAfetada ? "aviso-f" : "ok") }, c.reputacaoAfetada ? "Reputação afetada" : "Reputação não afetada", c.reputacaoOrigem === "mediador" ? " (segundo o mediador do ML)" : "");
+
+    // Edição: custo do produto, pendência, reputação
+    const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(c.custoProduto) });
+    const etiq = h("input", { type: "text", id: "ct-etiq", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: c.etiquetaOrigem === "faturamento" ? "" : emReais(c.etiqueta), disabled: c.etiquetaOrigem === "faturamento" });
+    const pend = h("select", { id: "ct-pend" }, Object.entries(PENDENCIA).map(([k, v]) => h("option", { value: k, selected: k === c.pendencia }, v)));
+    const obs = h("input", { type: "text", id: "ct-obs", maxlength: "500", placeholder: "Ex.: pedi cobertura em 31/10", value: c.pendenciaObs || "" });
+    const rep = h("select", { id: "ct-rep" }, h("option", { value: "", selected: c.reputacaoAfetada == null }, "Não informado"),
+      h("option", { value: "sim", selected: c.reputacaoAfetada === true }, "Sim, afetou"), h("option", { value: "nao", selected: c.reputacaoAfetada === false }, "Não afetou"));
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    const f = h("form", { class: "acao", novalidate: true },
+      h("div", { class: "campos-desfecho" },
+        h("div", {}, h("label", { for: "ct-custo" }, "Custo do produto perdido (R$)"), custo),
+        h("div", {}, h("label", { for: "ct-etiq" }, "Etiqueta de devolução prevista (R$)"), etiq)),
+      h("label", { for: "ct-pend" }, "Pendência com o Mercado Livre"), pend,
+      h("label", { for: "ct-obs" }, "Observação da pendência"), obs,
+      h("label", { for: "ct-rep" }, "Reputação afetada"), rep, msg,
+      h("button", { type: "submit", class: "sec mini" }, "Salvar conta"));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const v = { custoProduto: lerReais(custo.value), pendencia: pend.value, pendenciaObs: obs.value, reputacaoAfetada: rep.value === "" ? null : rep.value === "sim" };
+      if (!etiq.disabled) v.etiquetaPrevista = lerReais(etiq.value);
+      if ([v.custoProduto, v.etiquetaPrevista].some((x) => Number.isNaN(x))) { msg.textContent = "Valor inválido. Use, por exemplo, 49,90."; mostrar(msg, true); return; }
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/conta`, v);
+      if (r.ok) await recarregar(); else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
+    });
+    const lanc = c.lancamentos && c.lancamentos.length
+      ? h("details", { class: "lanc" }, h("summary", {}, `Lançamentos do faturamento do ML (${c.lancamentos.length})`),
+          h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
+      : null;
+    const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
+    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), dl, total,
+      dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, lanc, f);
+  }
+
   // ---------- Mercado Livre (equipe) ----------
   async function carregarMl() {
     const r = await api("GET", "/ml/status");
@@ -634,7 +707,26 @@
         await api("DELETE", "/ml"); carregarMl();
       });
       ac.append(sinc, des);
+      carregarFaturamento();
     }
+  }
+
+  async function carregarFaturamento() {
+    const box = $("#fat-estado");
+    box.replaceChildren();
+    const r = await api("GET", "/ml/faturamento");
+    if (!r.ok) return;
+    const f = r.json;
+    const btn = h("button", { type: "button", class: "sec mini" }, "Baixar faturamento agora");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Baixando…";
+      const x = await api("POST", "/ml/faturamento/sincronizar");
+      const av = $("#ml-aviso");
+      av.textContent = x.ok ? `Faturamento: ${x.json.lancamentos ?? 0} lançamento(s) em ${x.json.paginas ?? 0} página(s)${x.json.completo ? "" : " (continua na próxima rodada)"}.${x.json.erro ? " Erro: " + x.json.erro : ""}` : (x.json.erro || "Falha ao baixar.");
+      mostrar(av, true); carregarFaturamento();
+    });
+    box.append(h("p", {}, h("strong", {}, "Faturamento do ML: "), `${f.lancamentos} lançamento(s) de ${f.pedidos} pedido(s) guardados`, f.ultimaSync ? ` · última baixa ${fmt(f.ultimaSync)}` : " · ainda não baixado (baixa sozinho uma vez por dia)"),
+      f.ultimoErro ? h("p", { class: "erro-geral" }, "Último erro: " + f.ultimoErro) : null, h("div", { class: "acoes-u" }, btn));
   }
 
 
@@ -704,6 +796,17 @@
     const s = d.satisfacao;
     if (s.respostas) barras($("#g-satisfacao"), [5, 4, 3, 2, 1].map((n) => ({ rotulo: estrelas(n), n: (d.porNota || []).find((x) => x.k === n)?.n ?? 0 })));
     else $("#g-satisfacao").replaceChildren();
+    const cm = d.contaMl || {};
+    const nc = $("#n-conta");
+    nc.replaceChildren();
+    for (const [rot, val, cls] of [["Reclamações do ML com conta", cm.casos ?? 0, "em_analise"], ["Custo para a MCS", moeda(cm.custo) || "R$ 0,00", "nova"],
+      ["Vendido nesses pedidos", moeda(cm.vendas) || "R$ 0,00", "resolvida"], ["Reembolsado aos compradores", moeda(cm.reembolsos) || "R$ 0,00", "nova"],
+      ["Envios (ida + etiqueta)", moeda(cm.envios) || "R$ 0,00", "aguardando_cliente"], ["Créditos do ML", moeda(cm.creditos) || "R$ 0,00", "resolvida"],
+      ["Reputação afetada", cm.reputacao ?? 0, "nova"], ["Aguardando retorno do ML", (cm.pendencias || []).find((x) => x.k === "aguardando")?.n ?? 0, "aguardando_cliente"]])
+      nc.append(h("div", { class: "kpi " + cls }, rot, h("b", {}, String(val))));
+    barras($("#g-conta-mes"), (cm.porMes || []).map((x) => ({ rotulo: `${x.k.slice(5, 7)}/${x.k.slice(0, 4)} (${x.n})`, n: Math.max(0, Math.round((x.custo || 0) * 100) / 100) })));
+    barras($("#g-conta-produto"), (cm.porProduto || []).map((x) => ({ rotulo: `${x.k} (${x.n})`, n: Math.max(0, Math.round((x.custo || 0) * 100) / 100) })));
+    barras($("#g-conta-motivo"), (cm.porMotivo || []).map((x) => ({ rotulo: `${d.tipos[x.k] || x.k} (${x.n})`, n: Math.max(0, Math.round((x.custo || 0) * 100) / 100) })));
     $("#satisfacao-info").textContent = s.enviadas || s.respostas
       ? `${s.respostas} resposta(s) de ${s.enviadas} pesquisa(s) enviada(s) no período${s.respostas ? ` · ${Math.round((s.boas / s.respostas) * 100)}% deram 4 ou 5` : ""}.`
       : "Nenhuma pesquisa enviada no período. Elas saem por e-mail algumas horas depois de a ocorrência ser resolvida.";
@@ -834,11 +937,12 @@
   });
   $("#f-canal").addEventListener("change", (e) => { estado.filtro.canal = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-origem").addEventListener("change", (e) => { estado.filtro.origem = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
+  $("#f-pendencia").addEventListener("change", (e) => { estado.filtro.pendencia = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-status").addEventListener("change", (e) => { estado.filtro.status = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#f-responsavel").addEventListener("change", (e) => { estado.filtro.responsavel = e.target.value; estado.filtro.pagina = 1; carregarLista(); });
   $("#exportar-csv").addEventListener("click", () => {
     const f = estado.filtro;
-    window.location.assign("/api/admin/ocorrencias.csv?" + new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel }));
+    window.location.assign("/api/admin/ocorrencias.csv?" + new URLSearchParams({ q: f.q, canal: f.canal, status: f.status, origem: f.origem, responsavel: f.responsavel, pendencia: f.pendencia }));
   });
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });
