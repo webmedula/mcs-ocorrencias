@@ -416,7 +416,7 @@ export async function financeiroBruto(oc: any): Promise<Record<string, unknown>>
   };
   const consultas: Promise<readonly [string, unknown]>[] = [
     tenta("pedido", `/orders/${encodeURIComponent(pedido)}`),
-    tenta("faturamento_detalhes", `/billing/integration/periods/key/${encodeURIComponent(pedido)}/details?document_type=BILL&limit=50`),
+    tenta("faturamento_periodos", `/billing/integration/monthly/periods?group=ML&document_type=BILL&limit=3`),
   ];
   if (claimId) {
     consultas.push(tenta("reclamacao", `/post-purchase/v1/claims/${encodeURIComponent(claimId)}`));
@@ -424,15 +424,32 @@ export async function financeiroBruto(oc: any): Promise<Record<string, unknown>>
     consultas.push(tenta("devolucao_v1", `/post-purchase/v1/claims/${encodeURIComponent(claimId)}/returns`));
   }
   const out: Record<string, unknown> = Object.fromEntries(await Promise.all(consultas));
-  // Envios e pagamentos citados no pedido
+  // Envios (ida e volta) e pagamentos citados no pedido e na devolução
   const ped: any = out.pedido;
   const envios = new Set<string>();
   if (ped?.shipping?.id) envios.add(String(ped.shipping.id));
   for (const d of [out.devolucao_v2, out.devolucao_v1]) {
-    const lista: any[] = Array.isArray(d) ? d : (d as any)?.results ?? (d as any)?.data ?? ((d as any)?.shipping ? [d] : []);
-    for (const r of lista) if (r?.shipping?.id) envios.add(String(r.shipping.id));
+    const lista: any[] = Array.isArray(d) ? d : (d as any)?.results ?? (d as any)?.data ?? (d && typeof d === "object" && !(d as any).erro ? [d] : []);
+    for (const r of lista) {
+      if (r?.shipping?.id) envios.add(String(r.shipping.id));
+      for (const e of Array.isArray(r?.shipments) ? r.shipments : []) if (e?.shipment_id ?? e?.id) envios.add(String(e.shipment_id ?? e.id));
+    }
   }
   const extras: Promise<readonly [string, unknown]>[] = [];
+  // Faturamento: lançamentos dos últimos períodos, filtrados por este pedido (o ML não aceita buscar direto pelo pedido)
+  const periodos: any[] = Array.isArray((out.faturamento_periodos as any)?.results) ? (out.faturamento_periodos as any).results : [];
+  for (const per of periodos.slice(0, 3)) {
+    const chave = per?.key ?? per?.period?.key ?? per?.id;
+    if (!chave) continue;
+    extras.push((async () => {
+      try {
+        const det: any = await ml(`/billing/integration/periods/key/${encodeURIComponent(String(chave))}/group/ML/details?document_type=BILL&limit=1000`);
+        const itens: any[] = Array.isArray(det?.results) ? det.results : [];
+        const meus = itens.filter((it) => JSON.stringify(it).includes(pedido));
+        return [`faturamento_${chave}`, { total_no_periodo: itens.length, deste_pedido: meus, exemplo: meus.length ? null : itens[0] ?? null }] as const;
+      } catch (e: any) { return [`faturamento_${chave}`, { erro: e?.message, status: e?.status, corpo: e?.corpo ?? null }] as const; }
+    })());
+  }
   for (const id of envios) {
     extras.push(tenta(`envio_${id}`, `/shipments/${encodeURIComponent(id)}`));
     extras.push(tenta(`envio_${id}_custos`, `/shipments/${encodeURIComponent(id)}/costs`));

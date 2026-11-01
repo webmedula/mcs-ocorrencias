@@ -45,10 +45,11 @@ export function extrairRetorno(resp: any): RetornoMl | null {
   const r = [...validos].sort((a, b) => chave(b).localeCompare(chave(a)))[0];
   if (!r.status && !r.shipping && !r.shipments && !r.subtype) return null;
   const env = r.shipping ?? (Array.isArray(r.shipments) ? r.shipments[0] : null) ?? {};
-  const hist: any[] = Array.isArray(env.status_history) ? env.status_history : [];
+  const histLista: any[] = Array.isArray(env.status_history) ? env.status_history : [];
+  const histObj: any = env.status_history && !Array.isArray(env.status_history) ? env.status_history : {};
   const quando = (st: string) => {
-    const h = hist.find((x) => x?.status === st);
-    return dataSql(h?.date ?? h?.date_created ?? h?.timestamp);
+    const h = histLista.find((x) => x?.status === st);
+    return dataSql(h?.date ?? h?.date_created ?? h?.timestamp ?? histObj[`date_${st}`]);
   };
   const str = (v: unknown) => (v == null || v === "" ? null : String(v));
   return {
@@ -88,7 +89,8 @@ export function calcularStatus(i: EntradaStatus): StatusDevolucao {
   if (s === "delivered" || e === "delivered") return i.conferencia ? "conferida" : "recebida";
   if (s === "not_delivered" || e === "not_delivered") return "nao_entregue";
   if (s === "shipped" || e === "shipped") return "em_transito";
-  return i.acoes.includes("allow_return_label") ? "aguardando_liberacao" : "liberada";
+  // "label_generated": a etiqueta de volta já existe e o comprador ainda vai postar
+  return i.acoes.includes("allow_return_label") && s !== "label_generated" ? "aguardando_liberacao" : "liberada";
 }
 
 /** Custo do frete da devolução que fica com o vendedor. A resposta do ML não é bem documentada: lê o que reconhece. */

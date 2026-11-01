@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.8.2 — 2026-11-01
+
+Correções no diagnóstico financeiro e na leitura da devolução.
+
+- O diagnóstico agora consulta também o **envio de volta** da devolução (o ML o entrega em `shipments[].shipment_id`), com seu custo: é onde fica a etiqueta de devolução cobrada do vendedor.
+- Faturamento pelo caminho certo: lista os últimos períodos mensais e traz os lançamentos de cada um filtrados pelo pedido (o caminho anterior dava 404).
+- Devolução com status `label_generated` (etiqueta emitida, comprador ainda vai postar) passa a ser tratada como **Liberada, aguardando envio**, mesmo que a ação de liberar ainda apareça na reclamação.
+- Datas de envio e recebimento da devolução também são lidas quando o ML manda o histórico como objeto (`date_shipped`, `date_delivered`), e não só como lista.
+
 ## v1.8.1 — 2026-10-31
 
 Diagnóstico para a "conta da venda" do Mercado Livre.

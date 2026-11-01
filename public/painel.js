@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.8.1 — painel interno
+// Central de Ocorrências v1.8.2 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
