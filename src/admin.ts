@@ -557,9 +557,10 @@ admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
 });
 
 admin.get("/ml/faturamento", soGerente, (_req, res) => res.json(statusFaturamento()));
-admin.post("/ml/faturamento/sincronizar", soGerente, async (_req, res) => {
-  const r = await sincronizarFaturamento();
-  res.json({ ...r, ...statusFaturamento() });
+// Roda em segundo plano (respeita 5 chamadas/min do ML, pode levar vários minutos); a tela acompanha pelo status
+admin.post("/ml/faturamento/sincronizar", soGerente, (_req, res) => {
+  void sincronizarFaturamento().then((r) => console.log(`[faturamento] manual: ${r.lancamentos} lançamento(s) em ${r.paginas} página(s)${r.erro ? ` · erro: ${r.erro}` : ""}`));
+  res.status(202).json({ iniciado: true, ...statusFaturamento() });
 });
 
 admin.get("/ml/status", soGerente, (_req, res) => res.json(statusConexao()));

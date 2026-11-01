@@ -170,6 +170,25 @@ const estado = (k: string) => (db.prepare("SELECT valor FROM rotinas_estado WHER
 const gravarEstado = (k: string, v: string) =>
   db.prepare("INSERT INTO rotinas_estado (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor").run(k, v);
 
+const INTERVALO_MS = 13_000;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let ultimaChamada = 0;
+/** Espaça as chamadas ao faturamento e, se o ML devolver 429, espera um minuto e tenta de novo (até 3 vezes). */
+async function comLimite<T>(fn: () => Promise<T>): Promise<T> {
+  for (let tentativa = 0; ; tentativa++) {
+    const falta = ultimaChamada + INTERVALO_MS - Date.now();
+    if (falta > 0) await dormir(falta);
+    ultimaChamada = Date.now();
+    try {
+      return await fn();
+    } catch (e: any) {
+      const limite = e instanceof MlErro && (e.status === 429 || /rate limit/i.test(e.message));
+      if (!limite || tentativa >= 3) throw e;
+      await dormir(65_000);
+    }
+  }
+}
+
 export interface ResultadoFat { periodos: number; paginas: number; lancamentos: number; completo: boolean; erro?: string }
 let sincronizandoFat: Promise<ResultadoFat> | null = null;
 
@@ -184,7 +203,7 @@ async function sincronizarFaturamentoAgora(maxPaginas: number): Promise<Resultad
   const res: ResultadoFat = { periodos: 0, paginas: 0, lancamentos: 0, completo: true };
   const POR_PAGINA = 1000;
   try {
-    const per: any = await ml(`/billing/integration/monthly/periods?group=ML&document_type=BILL&limit=2`);
+    const per: any = await comLimite(() => ml(`/billing/integration/monthly/periods?group=ML&document_type=BILL&limit=2`));
     const lista: any[] = Array.isArray(per?.results) ? per.results : [];
     for (const p of lista) {
       const chave = p?.key ?? p?.period?.key;
@@ -198,13 +217,15 @@ async function sincronizarFaturamentoAgora(maxPaginas: number): Promise<Resultad
       let offset = estado(`faturamento_dia:${chave}`) === hoje ? Number(estado(chaveOffset) ?? 0) : 0;
       let terminou = false;
       while (res.paginas < maxPaginas) {
-        const det: any = await ml(`/billing/integration/periods/key/${encodeURIComponent(String(chave))}/group/ML/details?document_type=BILL&limit=${POR_PAGINA}&offset=${offset}`);
+        // O ML permite 5 chamadas por minuto nesta API: uma página a cada 13 s, e espera quando ele pedir
+        const det: any = await comLimite(() => ml(`/billing/integration/periods/key/${encodeURIComponent(String(chave))}/group/ML/details?document_type=BILL&limit=${POR_PAGINA}&offset=${offset}`));
         const itens: any[] = Array.isArray(det?.results) ? det.results : [];
         res.paginas++;
         res.lancamentos += gravarLancamentos(itens, String(chave));
         offset += itens.length;
         gravarEstado(`faturamento_dia:${chave}`, hoje);
         gravarEstado(chaveOffset, String(offset));
+        gravarEstado("faturamento_sync", new Date().toISOString().slice(0, 19).replace("T", " "));
         const total = typeof det?.total === "number" ? det.total : null;
         if (itens.length < POR_PAGINA || (total != null && offset >= total)) { terminou = true; break; }
       }
@@ -224,7 +245,7 @@ async function sincronizarFaturamentoAgora(maxPaginas: number): Promise<Resultad
 
 export function statusFaturamento() {
   const n = (db.prepare("SELECT COUNT(*) n, COUNT(DISTINCT pedido) p FROM ml_faturamento").get() as { n: number; p: number });
-  return { lancamentos: n.n, pedidos: n.p, ultimaSync: estado("faturamento_sync") || null, ultimoErro: estado("faturamento_erro") || null };
+  return { lancamentos: n.n, pedidos: n.p, ultimaSync: estado("faturamento_sync") || null, ultimoErro: estado("faturamento_erro") || null, emAndamento: Boolean(sincronizandoFat) };
 }
 
 export function lancamentosDoPedido(pedido: string) {

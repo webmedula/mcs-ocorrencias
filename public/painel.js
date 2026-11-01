@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.9.0 — painel interno
+// Central de Ocorrências v1.9.1 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -717,14 +717,16 @@
     const r = await api("GET", "/ml/faturamento");
     if (!r.ok) return;
     const f = r.json;
-    const btn = h("button", { type: "button", class: "sec mini" }, "Baixar faturamento agora");
+    const btn = h("button", { type: "button", class: "sec mini", disabled: f.emAndamento }, f.emAndamento ? "Baixando em segundo plano…" : "Baixar faturamento agora");
     btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "Baixando…";
+      btn.disabled = true; btn.textContent = "Baixando em segundo plano…";
       const x = await api("POST", "/ml/faturamento/sincronizar");
       const av = $("#ml-aviso");
-      av.textContent = x.ok ? `Faturamento: ${x.json.lancamentos ?? 0} lançamento(s) em ${x.json.paginas ?? 0} página(s)${x.json.completo ? "" : " (continua na próxima rodada)"}.${x.json.erro ? " Erro: " + x.json.erro : ""}` : (x.json.erro || "Falha ao baixar.");
-      mostrar(av, true); carregarFaturamento();
+      av.textContent = x.ok ? "Baixa do faturamento iniciada. O Mercado Livre permite 5 consultas por minuto, então pode levar vários minutos; o número abaixo vai subindo." : (x.json.erro || "Falha ao iniciar.");
+      mostrar(av, true);
+      setTimeout(carregarFaturamento, 20000);
     });
+    if (f.emAndamento) setTimeout(() => { if (estado.aba === "equipe") carregarFaturamento(); }, 20000);
     box.append(h("p", {}, h("strong", {}, "Faturamento do ML: "), `${f.lancamentos} lançamento(s) de ${f.pedidos} pedido(s) guardados`, f.ultimaSync ? ` · última baixa ${fmt(f.ultimaSync)}` : " · ainda não baixado (baixa sozinho uma vez por dia)"),
       f.ultimoErro ? h("p", { class: "erro-geral" }, "Último erro: " + f.ultimoErro) : null, h("div", { class: "acoes-u" }, btn));
   }

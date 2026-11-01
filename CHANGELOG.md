@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.1 — 2026-11-01
+
+- Correção: a baixa do faturamento do ML estourava o limite da API ("Rate limit exceeded: 5 requests per minute"). Agora pede uma página a cada 13 segundos e, se o ML pedir calma, espera um minuto e retoma de onde parou (até 3 vezes por página).
+- O botão **Baixar faturamento agora** passa a rodar em segundo plano: a tela responde na hora e o contador vai subindo; a baixa completa pode levar vários minutos.
+- O progresso parcial conta como "última baixa", mesmo quando a rodada não termina.
+
 ## v1.9.0 — 2026-11-01
 
 Conta da venda: o que cada reclamação do Mercado Livre custou, com pendência com o ML e reputação.
