@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.8.0 — painel interno
+// Central de Ocorrências v1.8.1 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -367,7 +367,10 @@
     const acoes = (c.acoes || []).map((a) => ACAO[a.action] || a.action);
     return h("div", { class: "faixa ml-info" },
       h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
-      acoes.length ? h("p", { class: "aviso" }, "Ações disponíveis no ML: " + acoes.join(", ") + ".") : null);
+      acoes.length ? h("p", { class: "aviso" }, "Ações disponíveis no ML: " + acoes.join(", ") + ".") : null,
+      estado.eu?.papel === "gerente"
+        ? h("p", { class: "aviso" }, h("a", { class: "link", href: `/api/admin/ocorrencias/${encodeURIComponent(o.protocolo)}/ml/financeiro-bruto`, download: "" }, "Baixar dados financeiros brutos do ML (diagnóstico)"))
+        : null);
   }
 
   const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
@@ -754,7 +757,7 @@
   const ROT_REG = { login_ok: "Entrou", login_falha: "Senha errada", login_novo_ip: "Entrou de IP novo", alerta_falhas: "Alerta: várias senhas erradas",
     redefinicao_pedida: "Pediu nova senha", senha_redefinida: "Nova senha por e-mail", senha_alterada: "Trocou a senha", usuario_criado: "Criou usuário",
     usuario_alterado: "Alterou usuário", chave_criada: "Criou chave da IA", chave_revogada: "Revogou chave da IA", dados_exportados: "Baixou dados do titular",
-    ocorrencia_anonimizada: "Anonimizou ocorrência", ocorrencia_excluida: "Excluiu ocorrência", lista_exportada: "Exportou a lista (CSV)" };
+    ocorrencia_anonimizada: "Anonimizou ocorrência", ocorrencia_excluida: "Excluiu ocorrência", lista_exportada: "Exportou a lista (CSV)", devolucao_contestada: "Contestou devolução no ML", ml_financeiro_bruto: "Baixou dados financeiros do ML" };
   async function carregarRegistro() {
     const r = await api("GET", "/registro?so=" + encodeURIComponent($("#reg-filtro").value));
     const corpo = $("#registro");

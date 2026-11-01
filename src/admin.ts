@@ -18,7 +18,7 @@ import QRCode from "qrcode";
 import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
 import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
-import { MlErro, atualizarOcorrenciaMl, desconectar, enviarMensagem, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import { MlErro, atualizarOcorrenciaMl, desconectar, enviarMensagem, financeiroBruto, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 import multer from "multer";
 import {
   MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
@@ -500,6 +500,21 @@ admin.post("/ocorrencias/:protocolo/devolucao/contestar", soPessoas, (req, res, 
     res.status(201).json(devolucaoDa(o.id));
   } catch (e) {
     return erroDev(res, e);
+  }
+});
+
+// Diagnóstico (v1.8.1): dados brutos de dinheiro do pedido no ML, para desenhar a "conta da venda". Só gerente; fica no registro.
+admin.get("/ocorrencias/:protocolo/ml/financeiro-bruto", soGerente, async (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml" && o.canal !== "mercado_livre") return res.status(400).json({ erro: "Esta ocorrência não é do Mercado Livre." });
+  try {
+    const r = await financeiroBruto(o);
+    registrar("ml_financeiro_bruto", { usuarioId: (req.ator as { id: number }).id, detalhe: o.protocolo, req });
+    res.setHeader("Content-Disposition", `attachment; filename="financeiro-ml-${o.protocolo}.json"`);
+    res.type("application/json").send(JSON.stringify(r, null, 2));
+  } catch (e) {
+    return erroMl(res, e);
   }
 });
 

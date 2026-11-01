@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8.1 — 2026-10-31
+
+Diagnóstico para a "conta da venda" do Mercado Livre.
+
+- No detalhe de uma ocorrência do Mercado Livre, o gerente ganha o link **Baixar dados financeiros brutos do ML**. Ele baixa um JSON com tudo que a API entrega sobre o dinheiro daquele pedido, sem tratamento: pedido (preço, tarifa de venda, pagamentos), lançamentos de faturamento, reclamação, devolução, envios e seus custos. Consulta que falhar aparece com o erro, sem derrubar o resto.
+- Serve só para confirmar os campos reais antes da v1.9.0, que vai montar o quadro "Recebimento devolvido" (preço do produto, tarifa de venda, envios, cancelamentos e total) dentro da Central. Nada muda para a equipe.
+- Cada download fica no Registro de atividades.
+
 ## v1.8.0 — 2026-10-28
 
 Devoluções do Mercado Livre: acompanhar, conferir, lançar custos e contestar.

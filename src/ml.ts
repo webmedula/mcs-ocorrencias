@@ -403,6 +403,48 @@ export async function atualizarOcorrenciaMl(oc: any): Promise<void> {
   await sincronizarDevolucao(oc.id, claim, c.user_id, true);
 }
 
+/** Diagnóstico (v1.8.1): tudo que o ML entrega sobre o dinheiro de um pedido, sem tratamento.
+ *  Serve para confirmar os campos antes de montar a "conta da venda". Cada consulta que falhar vira { erro }. */
+export async function financeiroBruto(oc: any): Promise<Record<string, unknown>> {
+  const c = conexao();
+  if (!c) throw new MlErro(409, "Mercado Livre não conectado.");
+  const pedido = String(oc.pedido);
+  const claimId = oc.ml_claim_id ? String(oc.ml_claim_id) : null;
+  const tenta = async (nome: string, caminho: string) => {
+    try { return [nome, await ml(caminho)] as const; }
+    catch (e: any) { return [nome, { erro: e?.message, status: e?.status, corpo: e?.corpo ?? null }] as const; }
+  };
+  const consultas: Promise<readonly [string, unknown]>[] = [
+    tenta("pedido", `/orders/${encodeURIComponent(pedido)}`),
+    tenta("faturamento_detalhes", `/billing/integration/periods/key/${encodeURIComponent(pedido)}/details?document_type=BILL&limit=50`),
+  ];
+  if (claimId) {
+    consultas.push(tenta("reclamacao", `/post-purchase/v1/claims/${encodeURIComponent(claimId)}`));
+    consultas.push(tenta("devolucao_v2", `/post-purchase/v2/claims/${encodeURIComponent(claimId)}/returns`));
+    consultas.push(tenta("devolucao_v1", `/post-purchase/v1/claims/${encodeURIComponent(claimId)}/returns`));
+  }
+  const out: Record<string, unknown> = Object.fromEntries(await Promise.all(consultas));
+  // Envios e pagamentos citados no pedido
+  const ped: any = out.pedido;
+  const envios = new Set<string>();
+  if (ped?.shipping?.id) envios.add(String(ped.shipping.id));
+  for (const d of [out.devolucao_v2, out.devolucao_v1]) {
+    const lista: any[] = Array.isArray(d) ? d : (d as any)?.results ?? (d as any)?.data ?? ((d as any)?.shipping ? [d] : []);
+    for (const r of lista) if (r?.shipping?.id) envios.add(String(r.shipping.id));
+  }
+  const extras: Promise<readonly [string, unknown]>[] = [];
+  for (const id of envios) {
+    extras.push(tenta(`envio_${id}`, `/shipments/${encodeURIComponent(id)}`));
+    extras.push(tenta(`envio_${id}_custos`, `/shipments/${encodeURIComponent(id)}/costs`));
+  }
+  for (const pg of (Array.isArray(ped?.payments) ? ped.payments : []).slice(0, 5)) {
+    if (pg?.id) extras.push(tenta(`pagamento_${pg.id}`, `/collections/${encodeURIComponent(String(pg.id))}`));
+  }
+  if (ped?.pack_id) extras.push(tenta("pacote", `/packs/${encodeURIComponent(String(ped.pack_id))}`));
+  Object.assign(out, Object.fromEntries(await Promise.all(extras)));
+  return { versao: config.version, consultado_em: new Date().toISOString(), pedido, claim_id: claimId, respostas: out };
+}
+
 // ---------- Agendamento ----------
 export function iniciarSincronizacaoML(): void {
   if (!mlConfigurado()) {
