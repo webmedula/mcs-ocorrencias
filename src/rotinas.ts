@@ -7,6 +7,7 @@ import { aplicarRetencao } from "./lgpd.js";
 import { enviarPesquisasPendentes } from "./pesquisa.js";
 import { completarPendentesTiny } from "./produtos.js";
 import { completarContas } from "./ml.js";
+import { completarCustosTiny } from "./custo.js";
 import { sincronizarFaturamento } from "./conta.js";
 
 /** Rotinas automáticas (v1.3.0): alerta de prazo do Mercado Livre, resumo diário e backup do banco.
@@ -164,6 +165,7 @@ async function ciclo(): Promise<void> {
     await enviarPesquisasPendentes();
     await completarPendentesTiny();
     await completarContas();
+    await completarCustosTiny();
     await faturamentoSeFaltar();
     aplicarRetencao();
   } catch (e: any) {

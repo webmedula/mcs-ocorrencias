@@ -23,6 +23,7 @@ import multer from "multer";
 import {
   MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
 } from "./devolucoes.js";
+import { atualizarCustoTiny } from "./custo.js";
 import { PENDENCIAS_ML, contaDa, editarConta, sincronizarFaturamento, statusFaturamento, type PendenciaMl } from "./conta.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
@@ -554,6 +555,16 @@ admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.origem !== "ml") return res.status(400).json({ erro: "A conta da venda só existe para ocorrências do Mercado Livre." });
   res.json(editarConta(o.id, p.data, nomeDoAtor(req.ator!)));
+});
+
+// Custo do produto pelo Tiny (v1.10.0): busca de novo agora (botão na conta da venda)
+admin.post("/ocorrencias/:protocolo/custo-tiny", soPessoas, async (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (o.origem !== "ml") return res.status(400).json({ erro: "A conta da venda só existe para ocorrências do Mercado Livre." });
+  if (!config.tinyToken) return res.status(409).json({ erro: "Integração com o Tiny desligada (falta TINY_TOKEN)." });
+  await atualizarCustoTiny(o.id);
+  res.json(contaDa(o.id));
 });
 
 admin.get("/ml/faturamento", soGerente, (_req, res) => res.json(statusFaturamento()));

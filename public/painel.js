@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.9.2 — painel interno
+// Central de Ocorrências v1.10.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -618,7 +618,7 @@
       ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
       ["Reembolso ao comprador", c.reembolso == null ? null : -c.reembolso, ""],
       ["Créditos do ML", c.creditos ? c.creditos : null, " (estornos e coberturas no faturamento)"],
-      ["Custo do produto perdido", c.custoProduto == null ? null : -c.custoProduto, " (lançado pela equipe)"],
+      ["Custo do produto", c.custoProduto == null ? null : -c.custoProduto, c.custoOrigem === "tiny" ? " (custo do cadastro no Tiny)" : " (digitado pela equipe)"],
     ].filter((x) => x[1] != null);
     const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null), h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
     const total = h("div", { class: "conta-total" },
@@ -633,8 +633,28 @@
     const reput = c.reputacaoAfetada == null ? null
       : h("div", { class: "faixa " + (c.reputacaoAfetada ? "aviso-f" : "ok") }, c.reputacaoAfetada ? "Reputação afetada" : "Reputação não afetada", c.reputacaoOrigem === "mediador" ? " (segundo o mediador do ML)" : "");
 
+    // Custo pelo Tiny (v1.10.0): itens com custo unitário, aviso quando falta custo e botão para buscar de novo
+    const itensCusto = (c.custoTinyItens || []).filter((i) => i && (i.sku || i.titulo));
+    const msgTiny = h("span", { class: "oculto", role: "status" });
+    const btTiny = h("button", { type: "button", class: "sec mini" }, "Buscar custo no Tiny");
+    btTiny.addEventListener("click", async () => {
+      btTiny.disabled = true;
+      const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/custo-tiny`);
+      btTiny.disabled = false;
+      if (r.ok) await recarregar(); else { msgTiny.textContent = " " + (r.json.erro || "Não foi possível consultar o Tiny."); mostrar(msgTiny, true); }
+    });
+    const blocoTiny = h("div", { class: "custo-tiny" },
+      itensCusto.length
+        ? h("details", { class: "lanc" }, h("summary", {}, `Custo no Tiny: ${c.custoTiny == null ? "incompleto" : reaisTxt(c.custoTiny)}${c.custoOrigem === "manual" && c.custoTiny != null ? " (a conta usa o valor digitado)" : ""}`),
+            h("ul", {}, itensCusto.map((i) => h("li", {}, `${i.qtd} × ${i.sku || i.titulo}${i.sku && i.titulo ? ` · ${i.titulo}` : ""} · `,
+              i.unitario == null ? h("b", { class: "neg" }, "sem custo no cadastro") : h("b", {}, `${reaisTxt(i.unitario)} cada = ${reaisTxt(i.total)}`)))))
+        : null,
+      c.custoTinyErro ? h("p", { class: "aviso" }, c.custoTinyErro) : null,
+      h("p", { class: "aviso" }, c.custoTinyEm ? `Custo lido do Tiny em ${fmt(c.custoTinyEm)}. ` : "Custo ainda não buscado no Tiny. ", btTiny, msgTiny));
+
     // Edição: custo do produto, pendência, reputação
-    const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(c.custoProduto) });
+    const custoInicial = c.custoOrigem === "manual" ? emReais(c.custoProduto) : "";
+    const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: c.custoTiny != null ? `${emReais(c.custoTiny)} (Tiny)` : "0,00", autocomplete: "off", value: custoInicial });
     const etiq = h("input", { type: "text", id: "ct-etiq", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: c.etiquetaOrigem === "faturamento" ? "" : emReais(c.etiqueta), disabled: c.etiquetaOrigem === "faturamento" });
     const pend = h("select", { id: "ct-pend" }, Object.entries(PENDENCIA).map(([k, v]) => h("option", { value: k, selected: k === c.pendencia }, v)));
     const obs = h("input", { type: "text", id: "ct-obs", maxlength: "500", placeholder: "Ex.: pedi cobertura em 31/10", value: c.pendenciaObs || "" });
@@ -643,7 +663,7 @@
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
     const f = h("form", { class: "acao", novalidate: true },
       h("div", { class: "campos-desfecho" },
-        h("div", {}, h("label", { for: "ct-custo" }, "Custo do produto perdido (R$)"), custo),
+        h("div", {}, h("label", { for: "ct-custo" }, "Custo do produto (R$)", h("small", {}, " vazio = usa o do Tiny")), custo),
         h("div", {}, h("label", { for: "ct-etiq" }, "Etiqueta de devolução prevista (R$)"), etiq)),
       h("label", { for: "ct-pend" }, "Pendência com o Mercado Livre"), pend,
       h("label", { for: "ct-obs" }, "Observação da pendência"), obs,
@@ -651,7 +671,9 @@
       h("button", { type: "submit", class: "sec mini" }, "Salvar conta"));
     f.addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      const v = { custoProduto: lerReais(custo.value), pendencia: pend.value, pendenciaObs: obs.value, reputacaoAfetada: rep.value === "" ? null : rep.value === "sim" };
+      const v = { pendencia: pend.value, pendenciaObs: obs.value, reputacaoAfetada: rep.value === "" ? null : rep.value === "sim" };
+      // Só manda o custo quando a equipe mexeu nele (senão salvaria o valor do Tiny como digitado)
+      if (custo.value.trim() !== custoInicial.trim()) v.custoProduto = lerReais(custo.value);
       if (!etiq.disabled) v.etiquetaPrevista = lerReais(etiq.value);
       if ([v.custoProduto, v.etiquetaPrevista].some((x) => Number.isNaN(x))) { msg.textContent = "Valor inválido. Use, por exemplo, 49,90."; mostrar(msg, true); return; }
       const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/conta`, v);
@@ -663,7 +685,7 @@
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
     return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), dl, total,
-      dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, lanc, f);
+      dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 
   // ---------- Mercado Livre (equipe) ----------

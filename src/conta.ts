@@ -322,6 +322,9 @@ export function contaDa(ocId: number): any | null {
     reembolso: reais(c.reembolso_centavos),
     creditos: reais(creditos),
     custoProduto: reais(c.custo_produto_centavos),
+    custoOrigem: c.custo_produto_centavos == null ? null : c.custo_origem ?? "manual",
+    custoTiny: reais(c.custo_tiny_centavos), custoTinyEm: c.custo_tiny_em ?? null, custoTinyErro: c.custo_tiny_erro ?? null,
+    custoTinyItens: (() => { try { return c.custo_tiny_json ? JSON.parse(c.custo_tiny_json) : []; } catch { return []; } })(),
     liquidoHoje: reais(c.liquido_centavos),
     totalMl: reais(totalMl), resultado: reais(resultado),
     pagamentoStatus: c.pagamento_status, liberado: c.liberado == null ? null : Boolean(c.liberado), liberacaoEm: c.liberacao_em,
@@ -345,7 +348,16 @@ export function editarConta(ocId: number, e: EdicaoConta, autor: string): any {
   if (!existe) db.prepare("INSERT INTO conta_venda (ocorrencia_id) VALUES (?)").run(ocId);
   const sets: string[] = []; const args: unknown[] = []; const notas: string[] = [];
   const c = (v: number | null | undefined) => (v == null ? null : Math.round(v * 100));
-  if (e.custoProduto !== undefined) { sets.push("custo_produto_centavos = ?"); args.push(c(e.custoProduto)); notas.push(e.custoProduto == null ? "Custo do produto removido da conta da venda." : `Custo do produto na conta da venda: R$ ${e.custoProduto.toFixed(2).replace(".", ",")}.`); }
+  if (e.custoProduto !== undefined) {
+    if (e.custoProduto == null) {
+      // Apagar o valor digitado volta a usar o custo do Tiny (quando houver)
+      sets.push("custo_produto_centavos = custo_tiny_centavos", "custo_origem = CASE WHEN custo_tiny_centavos IS NULL THEN NULL ELSE 'tiny' END");
+      notas.push("Custo do produto digitado foi removido; a conta volta a usar o custo do Tiny, quando houver.");
+    } else {
+      sets.push("custo_produto_centavos = ?", "custo_origem = 'manual'"); args.push(c(e.custoProduto));
+      notas.push(`Custo do produto na conta da venda: R$ ${e.custoProduto.toFixed(2).replace(".", ",")} (digitado pela equipe).`);
+    }
+  }
   if (e.etiquetaPrevista !== undefined) { sets.push("etiqueta_prevista_centavos = ?"); args.push(c(e.etiquetaPrevista)); notas.push("Etiqueta de devolução prevista ajustada."); }
   if (e.pendencia !== undefined) { sets.push("pendencia_ml = ?", "pendencia_em = datetime('now')"); args.push(e.pendencia); notas.push(`Pendência com o ML: ${PENDENCIAS_ML[e.pendencia]}.`); }
   if (e.pendenciaObs !== undefined) { sets.push("pendencia_obs = ?"); args.push(e.pendenciaObs?.trim() || null); }

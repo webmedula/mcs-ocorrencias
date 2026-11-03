@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.9.2",
+  version: "1.10.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -25,6 +25,8 @@ export const config = {
   // Tiny (API v2 por token). Vazio = integração desligada.
   tinyToken: env.TINY_TOKEN ?? "",
   tinyBaseUrl: env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2",
+  // Custo do produto na conta da venda (v1.10.0): "custo" = preço de custo do cadastro; "medio" = custo médio
+  tinyCusto: (env.TINY_CUSTO === "medio" ? "medio" : "custo") as "custo" | "medio",
   // Telegram. Vazio = aviso desligado.
   telegramToken: env.TELEGRAM_BOT_TOKEN ?? "",
   telegramChatId: env.TELEGRAM_CHAT_ID ?? "",
