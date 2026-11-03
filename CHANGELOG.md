@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.2 — 2026-11-03
+
+- **Pedidos de cancelamento do Mercado Livre não entram mais na Central.** Reclamações do tipo cancelamento da compra (`cancel_purchase` e `cancel_sale`) são ignoradas na sincronização: não viram ocorrência, não avisam no Telegram e não geram alerta de prazo.
+- As que já tinham sido importadas e ainda estavam abertas saem da fila sozinhas na próxima sincronização: ficam como **Resolvida**, sem prazo, com uma nota no histórico. Nada é apagado.
+
 ## v1.9.1 — 2026-11-01
 
 - Correção: a baixa do faturamento do ML estourava o limite da API ("Rate limit exceeded: 5 requests per minute"). Agora pede uma página a cada 13 segundos e, se o ML pedir calma, espera um minuto e retoma de onde parou (até 3 vezes por página).

@@ -224,12 +224,28 @@ async function motivoDe(reasonId: string | null): Promise<string | null> {
   } catch { return null; }
 }
 
+// Pedidos de cancelamento da compra (v1.9.2): não são problema com o produto e não precisam de atendimento
+export const TIPOS_CANCELAMENTO = new Set(["cancel_purchase", "cancel_sale"]);
+export const ehCancelamento = (claim: any) => TIPOS_CANCELAMENTO.has(String(claim?.type ?? ""));
+
 async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boolean; atualizada: boolean; mensagens: number }> {
   const id = String(claim.id);
   const existente = db.prepare("SELECT * FROM ocorrencias WHERE ml_claim_id = ?").get(id) as any | undefined;
   const prazo = prazoDe(claim, vendedor);
   // Apagada/anonimizada a pedido do titular: não importa de novo nem atualiza
   if (db.prepare("SELECT 1 FROM ml_ignorados WHERE claim_id = ?").get(id)) return { nova: false, atualizada: false, mensagens: 0 };
+  if (ehCancelamento(claim)) {
+    // Importada antes da v1.9.2 e ainda aberta: sai da fila (resolvida, sem prazo); nada é apagado
+    if (existente && existente.status !== "resolvida") {
+      db.transaction(() => {
+        db.prepare("UPDATE ocorrencias SET status = 'resolvida', resolvida_em = datetime('now'), prazo_em = NULL, atualizado_em = datetime('now') WHERE id = ?").run(existente.id);
+        db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)")
+          .run(existente.id, "Pedido de cancelamento da compra no Mercado Livre: a Central não acompanha cancelamentos.", "Sistema");
+      })();
+      return { nova: false, atualizada: true, mensagens: 0 };
+    }
+    return { nova: false, atualizada: false, mensagens: 0 };
+  }
 
   if (!existente) {
     if (claim.status === "closed") return { nova: false, atualizada: false, mensagens: 0 }; // não importa histórico já encerrado
