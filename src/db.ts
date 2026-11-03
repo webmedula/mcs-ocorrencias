@@ -305,3 +305,15 @@ CREATE TABLE IF NOT EXISTS ml_faturamento (
 CREATE INDEX IF NOT EXISTS idx_fat_pedido ON ml_faturamento(pedido);
 CREATE INDEX IF NOT EXISTS idx_fat_data ON ml_faturamento(data);
 `);
+
+// ---------- v1.10.0: custo do produto pelo Tiny ----------
+const colunasConta = (db.prepare("PRAGMA table_info(conta_venda)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasConta.includes("custo_origem")) {
+  db.exec("ALTER TABLE conta_venda ADD COLUMN custo_origem TEXT");
+  // O que a equipe já digitou continua valendo
+  db.exec("UPDATE conta_venda SET custo_origem = 'manual' WHERE custo_produto_centavos IS NOT NULL");
+}
+if (!colunasConta.includes("custo_tiny_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_centavos INTEGER");
+if (!colunasConta.includes("custo_tiny_json")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_json TEXT");
+if (!colunasConta.includes("custo_tiny_em")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_em TEXT");
+if (!colunasConta.includes("custo_tiny_erro")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_erro TEXT");

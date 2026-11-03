@@ -138,3 +138,70 @@ export async function itensDoPedido(idPedido: string): Promise<ItemTiny[]> {
   }
   return out;
 }
+
+// ---------- Custo dos produtos do pedido (v1.10.0) ----------
+// O mesmo "Custo produtos" do relatório de custos do e-commerce do Tiny: custo do cadastro × quantidade.
+const CACHE_CUSTO_MS = 6 * 60 * 60 * 1000;
+const cacheProduto = new Map<string, { em: number; p: any }>();
+async function produtoComCache(id: string): Promise<any | null> {
+  const c = cacheProduto.get(id);
+  if (c && Date.now() - c.em < CACHE_CUSTO_MS) return c.p;
+  const p = await obterProduto(id);
+  cacheProduto.set(id, { em: Date.now(), p });
+  return p;
+}
+export const limparCacheCusto = () => cacheProduto.clear();
+
+/** Custo unitário lido do cadastro: preço de custo (ou custo médio, com TINY_CUSTO=medio), com o outro de reserva. */
+export function custoDoCadastro(p: any, preferir: "custo" | "medio" = config.tinyCusto): number | null {
+  const custo = num(p?.preco_custo), medio = num(p?.preco_custo_medio);
+  const ordem = preferir === "medio" ? [medio, custo] : [custo, medio];
+  return ordem.find((v) => v != null && v > 0) ?? null;
+}
+
+/** Custo unitário de um produto: kit soma os componentes; variação sem custo usa o do produto pai. */
+async function custoUnitario(id: string, nivel = 0): Promise<number | null> {
+  const p = await produtoComCache(id);
+  if (!p) return null;
+  const kit: any[] = Array.isArray(p.kit) ? p.kit.map((k: any) => k?.item ?? k) : [];
+  if (String(p.classe_produto ?? "").toUpperCase() === "K" && kit.length && nivel < 2) {
+    let total = 0;
+    for (const k of kit) {
+      const idc = k?.id_produto != null ? String(k.id_produto) : "";
+      const qtd = num(k?.quantidade) ?? 1;
+      const cu = idc ? await custoUnitario(idc, nivel + 1) : null;
+      if (cu == null) return custoDoCadastro(p); // componente sem custo: tenta o custo do próprio kit
+      total += cu * qtd;
+    }
+    return total;
+  }
+  const proprio = custoDoCadastro(p);
+  if (proprio != null) return proprio;
+  const pai = p.idProdutoPai ?? p.id_produto_pai;
+  return pai && String(pai) !== "0" && nivel < 2 ? custoUnitario(String(pai), nivel + 1) : null;
+}
+
+export interface CustoItem { sku: string | null; titulo: string | null; qtd: number; unitario: number | null; total: number | null }
+export interface CustoPedido { itens: CustoItem[]; total: number | null; faltando: string[] }
+
+/** Custo dos itens do pedido no Tiny, em reais. `total` fica null se algum item não tem custo no cadastro. Lança se o Tiny falhar. */
+export async function custosDoPedido(idPedido: string): Promise<CustoPedido> {
+  const r = await chamar("pedido.obter.php", { id: idPedido });
+  const itens: any[] = (r?.pedido?.itens ?? []).map((x: any) => x?.item ?? x).slice(0, 20);
+  const out: CustoItem[] = [];
+  const faltando: string[] = [];
+  for (const it of itens) {
+    const id = it?.id_produto != null && String(it.id_produto) !== "" && String(it.id_produto) !== "0" ? String(it.id_produto) : null;
+    const qtd = num(it?.quantidade) ?? 1;
+    const unitario = id ? await custoUnitario(id) : null;
+    const nome = it?.codigo ? String(it.codigo) : it?.descricao ? String(it.descricao) : "item sem código";
+    if (unitario == null) faltando.push(nome);
+    out.push({
+      sku: it?.codigo ? String(it.codigo) : null, titulo: it?.descricao ? String(it.descricao) : null, qtd,
+      unitario: unitario == null ? null : Math.round(unitario * 100) / 100,
+      total: unitario == null ? null : Math.round(unitario * qtd * 100) / 100,
+    });
+  }
+  const total = out.length && !faltando.length ? Math.round(out.reduce((t, i) => t + (i.total ?? 0), 0) * 100) / 100 : null;
+  return { itens: out, total, faltando };
+}

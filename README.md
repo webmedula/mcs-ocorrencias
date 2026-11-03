@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.9.2
+# Central de Ocorrências — v1.10.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.9.2** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.10.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -50,6 +50,7 @@ npm test                 # testes automáticos (banco temporário, nada é envia
 | `BRAND_NAME`, `SUPPORT_EMAIL`, `SUPPORT_WHATSAPP`, `PRIVACY_URL` | Nome e contatos exibidos na página |
 | `PROTOCOL_PREFIX` | Prefixo do protocolo (padrão `MCS`) |
 | `TINY_TOKEN` | Token da API do Tiny (v2). Vazio = sem consulta ao Tiny |
+| `TINY_CUSTO` | Custo do produto na conta da venda: `custo` (padrão, preço de custo do cadastro) ou `medio` (custo médio) |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Aviso de nova ocorrência. Vazio = desligado |
 | `SMTP_*`, `MAIL_FROM` | E-mail de confirmação. Sem `SMTP_HOST`, só registra no log |
 | `IP_SALT` | Texto aleatório; o IP é guardado apenas como hash |
@@ -136,6 +137,14 @@ Reclamações do Mercado Livre mostram a foto, o título, o SKU e o link do anú
 - **Testes automáticos** (`npm test`), rodados no GitHub antes de publicar a imagem.
 
 Tabela extra: `pesquisas`; colunas `ocorrencias.desfecho`, `ocorrencias.custo_centavos`, `ocorrencias.resolvida_em` e `eventos.do_cliente`.
+
+## Novidades da v1.10.0
+
+- **Custo do produto pelo Tiny** na conta da venda das ocorrências do Mercado Livre, como a coluna "Custo produtos" do relatório de custos do e-commerce do Tiny: a Central lê os itens do pedido no Tiny (`pedido.obter`) e o custo do cadastro de cada produto (`produto.obter`), multiplica pela quantidade e soma. Kit soma os componentes; variação sem custo usa o do produto pai. Usa o preço de custo (ou o custo médio, com `TINY_CUSTO=medio`), com o outro de reserva.
+- O valor digitado pela equipe continua valendo mais que o do Tiny; apagar o campo volta a usar o do Tiny. O quadro mostra de onde veio o custo, o custo de cada item e avisa quando um produto não tem custo no cadastro. Botão **Buscar custo no Tiny** para ler de novo.
+- Ocorrências antigas são completadas pela rotina (5 a cada 10 min); quem ficou sem custo é tentado de novo uma vez por dia. Precisa de `TINY_TOKEN`.
+
+Colunas novas: `conta_venda.custo_origem`, `custo_tiny_centavos`, `custo_tiny_json`, `custo_tiny_em`, `custo_tiny_erro`.
 
 ## Novidades da v1.7.0
 

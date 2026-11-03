@@ -10,6 +10,7 @@ import { buscarPedido } from "./tiny.js";
 import { guardarFoto, type Produto } from "./produtos.js";
 import { sincronizarDevolucao, precisaVerDevolucao } from "./devolucoes.js";
 import { atualizarContaVenda, contasPendentes } from "./conta.js";
+import { atualizarCustoTiny } from "./custo.js";
 
 export function statusConexao() {
   const c = conexao();
@@ -288,6 +289,7 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
     const n = gravarMensagens(ocId, msgs);
     await sincronizarDevolucao(ocId, claim, vendedor);
     if (bruto) await atualizarContaVenda(ocId, bruto, vendedor);
+    await atualizarCustoTiny(ocId);
     await enviarTelegram(
       [
         "🟠 <b>Nova reclamação no Mercado Livre</b> " + `<code>${esc(protocolo)}</code>`,
@@ -437,6 +439,7 @@ export async function atualizarOcorrenciaMl(oc: any): Promise<void> {
   await processarClaim(claim, c.user_id);
   await sincronizarDevolucao(oc.id, claim, c.user_id, true);
   await atualizarConta(oc.id, oc.pedido, c.user_id);
+  await atualizarCustoTiny(oc.id);
 }
 
 /** Diagnóstico (v1.8.1): tudo que o ML entrega sobre o dinheiro de um pedido, sem tratamento.

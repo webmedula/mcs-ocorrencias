@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.0 — 2026-11-03
+
+- **Custo do produto pelo Tiny na conta da venda.** Nas ocorrências do Mercado Livre, o custo do produto deixa de depender de digitação: a Central busca o pedido no Tiny, lê o custo do cadastro de cada item e multiplica pela quantidade, como a coluna "Custo produtos" do relatório de custos do e-commerce do Tiny. Kit soma os componentes e variação sem custo usa o do produto pai.
+- Usa o preço de custo do cadastro; com `TINY_CUSTO=medio`, usa o custo médio. Se um estiver zerado, usa o outro.
+- O que a equipe já digitou continua valendo (e vale mais que o Tiny). Apagar o campo volta ao custo do Tiny. O quadro mostra a origem do custo, o custo de cada item e avisa quando um produto está sem custo no cadastro; o botão **Buscar custo no Tiny** lê de novo na hora.
+- As ocorrências antigas são completadas aos poucos pela rotina (5 a cada 10 minutos).
+
 ## v1.9.2 — 2026-11-03
 
 - **Pedidos de cancelamento do Mercado Livre não entram mais na Central.** Reclamações do tipo cancelamento da compra (`cancel_purchase` e `cancel_sale`) são ignoradas na sincronização: não viram ocorrência, não avisam no Telegram e não geram alerta de prazo.
