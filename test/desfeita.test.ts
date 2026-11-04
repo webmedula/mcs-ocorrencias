@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { db } from "../src/db.js";
-import { contaDa, estornosDoPagamento, gravarLancamentos, situacaoDaVenda } from "../src/conta.js";
+import { contaDa, gravarLancamentos, situacaoDaVenda } from "../src/conta.js";
 
 let n = 0;
 function caso(conta: Record<string, unknown>, devolucao?: { status: string; conferencia?: string | null }) {
@@ -30,18 +30,23 @@ describe("conta da venda igual ao Recebimento do ML (só dados reais)", () => {
     expect(c).toMatchObject({ cancelamentos: -40.56, tarifaCancelada: null, envioCancelado: null, totalMl: -12.11 });
   });
 
-  it("com o cancelamento do envio, fica −R$ 4,66 (primeiro print do ML)", () => {
-    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745 }, { status: "encerrada" });
-    expect(contaDa(id)).toMatchObject({ cancelamentos: -33.11, envioCancelado: 7.45, envioCanceladoOrigem: "pagamento", totalMl: -4.66 });
+  it("com o líquido do pagamento (28,45), o ML só tirou o líquido: tarifa e envio cancelados, total R$ 0,00", () => {
+    const id = caso({ ...CASO, liquido_centavos: 2845 }, { status: "encerrada" });
+    expect(contaDa(id)).toMatchObject({ cancelamentos: -28.45, tarifaCancelada: 4.66, envioCancelado: 7.45, tarifaCanceladaOrigem: "pagamento", tarifasCanceladas: null, totalMl: 0, resultado: 0 });
   });
 
-  it("com tarifa e envio cancelados, fica R$ 0,00 (segundo print do ML)", () => {
-    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745, estorno_tarifa_pag_centavos: 466 }, { status: "encerrada" });
-    expect(contaDa(id)).toMatchObject({ cancelamentos: -28.45, tarifaCancelada: 4.66, totalMl: 0, resultado: 0 });
+  it("se a diferença não bate com tarifa + envio, mostra numa linha só", () => {
+    const id = caso({ ...CASO, liquido_centavos: 3311 }, { status: "encerrada" });
+    expect(contaDa(id)).toMatchObject({ cancelamentos: -33.11, tarifaCancelada: null, envioCancelado: null, tarifasCanceladas: 7.45, totalMl: -4.66 });
+  });
+
+  it("reembolso parcial não usa o líquido (só o que o ML informar no faturamento)", () => {
+    const id = caso({ ...CASO, reembolso_centavos: 2000, pagamento_status: "partially_refunded", liquido_centavos: 2845 });
+    expect(contaDa(id)).toMatchObject({ cancelamentos: -20, tarifaCancelada: null, envioCancelado: null, tarifasCanceladas: null });
   });
 
   it("os cancelamentos também podem vir do faturamento (bonificação/cancelamento de tarifa), sem contar duas vezes", () => {
-    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745 }, { status: "encerrada" });
+    const id = caso(CASO, { status: "encerrada" });
     gravarLancamentos([
       item(pedidoDe(id), 9100 + id, "BONUS", "Cancelamento de tarifa de venda", 4.66),
       item(pedidoDe(id), 9200 + id, "CHARGE", "Cancelamento de tarifa do Mercado Envios", 7.45),
@@ -56,15 +61,6 @@ describe("conta da venda igual ao Recebimento do ML (só dados reais)", () => {
     expect(c.resultado).toBe(55);
   });
 
-  it("lê os estornos do pagamento v1 (charges_details)", () => {
-    expect(estornosDoPagamento({ charges_details: [
-      { name: "meli_fee", type: "fee", accounts: { from: "collector", to: "mp" }, amounts: { original: 4.66, refunded: 4.66 } },
-      { name: "shp_fulfillment", type: "shipping", accounts: { from: "collector", to: "mp" }, amounts: { original: 7.45, refunded: 7.45 } },
-      { name: "financing_fee", type: "fee", accounts: { from: "payer", to: "mp" }, amounts: { original: 3, refunded: 3 } },
-    ] })).toEqual({ tarifa: 466, envio: 745 });
-    expect(estornosDoPagamento({})).toEqual({ tarifa: null, envio: null });
-  });
-
   it("custo do produto só entra quando o produto não volta ou volta com problema", () => {
     const base = { preco: 10000, reembolso: 10000, pagamentoStatus: "refunded", custo: 3000, custoOrigem: "tiny" };
     expect(situacaoDaVenda({ ...base, devolucao: { status: "em_transito", conferencia: null } }).custoConta).toBeNull();
@@ -76,7 +72,7 @@ describe("conta da venda igual ao Recebimento do ML (só dados reais)", () => {
   });
 
   it("custos lançados na devolução entram na conta", () => {
-    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745, estorno_tarifa_pag_centavos: 466, custo_produto_centavos: 3000, custo_origem: "tiny" },
+    const id = caso({ ...CASO, liquido_centavos: 2845, custo_produto_centavos: 3000, custo_origem: "tiny" },
       { status: "conferida", conferencia: "ok" });
     db.prepare("UPDATE devolucoes SET frete_centavos = 2490, frete_origem = 'ml', perda_centavos = 1500, outros_centavos = 200, recuperado_centavos = 1000 WHERE ocorrencia_id = ?").run(id);
     const c = contaDa(id);

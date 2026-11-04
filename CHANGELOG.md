@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.10.5 — 2026-11-04
+
+- **Cancelamentos pelo pagamento do ML.** No reembolso total, o ML só tira da MCS o líquido que ela recebeu (`net_received_amount` do pagamento); a diferença entre o reembolso e o líquido são as tarifas que o ML cancelou. A conta usa esse dado real: quando a diferença é exatamente tarifa de venda + envio, mostra as duas linhas; senão, mostra "Tarifas canceladas pelo ML" numa linha só. O faturamento continua valendo quando traz os lançamentos. Caso MCS-20261026-7HCSAD: Cancelamentos −R$ 28,45, Total R$ 0,00, igual ao ML.
+- Sai a consulta ao pagamento v1 (o ML responde 404 para essa API).
+- O painel não fica mais com a versão antiga no navegador depois do deploy (HTML, JS e CSS sempre conferem se há versão nova).
+
 ## v1.10.4 — 2026-11-04
 
 - **Conta da venda igual ao "Recebimento" do Mercado Livre, só com dados reais.** Sai qualquer regra sobre o que o ML devolve ou não: a conta mostra, na mesma ordem do ML, preço do produto, tarifa de venda, envios e **Cancelamentos** (produto devolvido ao comprador, cancelamento da tarifa de venda e cancelamento da tarifa de envio), e o Total no ML. Cada cancelamento só aparece quando o ML informa: pelo pagamento (API v1, `charges_details` com o valor estornado de cada cobrança) ou pelo faturamento.

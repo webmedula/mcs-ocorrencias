@@ -388,7 +388,11 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 });
 
 // ---------- Front estático ----------
-app.use(express.static(publicDir, { extensions: ["html"], maxAge: "5m" }));
+// Painel e páginas: o navegador sempre confere se há versão nova (v1.10.5: depois do deploy não fica com o JS antigo)
+app.use(express.static(publicDir, {
+  extensions: ["html"], maxAge: "5m",
+  setHeaders: (res, arquivo) => { if (/\.(html|js|css)$/.test(arquivo)) res.setHeader("Cache-Control", "no-cache"); },
+}));
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[erro]", err);
