@@ -1,6 +1,6 @@
 {
   "name": "central-ocorrencias",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "Central de Ocorrências MCS — formulário multicanal (Mercado Livre, Shopee, TikTok Shop, loja própria) com protocolo, Tiny, Telegram e e-mail",
   "private": true,
   "type": "module",

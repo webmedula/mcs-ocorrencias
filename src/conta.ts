@@ -112,9 +112,14 @@ export interface Lancamento {
 }
 export type Categoria = "etiqueta_devolucao" | "frete" | "tarifa_venda" | "credito" | "outro";
 
+// Tipo ou descrição de lançamento que devolve dinheiro à MCS (nota de crédito, bonificação, cancelamento/estorno de tarifa)
+const TIPO_CREDITO = /credit|bonif|bonus|refund|cancel|reversal|devolu[çc][ãa]o de tarifa|estorno/i;
+const DESCRICAO_CREDITO = /^\s*(cancelamento|estorno|devolu[çc][ãa]o|reembolso|anula[çc][ãa]o) d[aeo]s? (tarifa|cobran|comiss|custo|envio|frete)/i;
+export const ehCreditoPelaDescricao = (descricao: string) => DESCRICAO_CREDITO.test(descricao || "");
+
 export function classificarLancamento(l: { tipo: string; subtipo: string | null; descricao: string; valor: number; mercado: string | null }): Categoria {
   const d = (l.descricao || "").toLowerCase();
-  const credito = l.valor < 0 || /credit|bonif|refund|devolu[çc][ãa]o de tarifa|estorno/i.test(l.tipo + " " + (l.subtipo ?? ""));
+  const credito = l.valor < 0 || TIPO_CREDITO.test(l.tipo + " " + (l.subtipo ?? "")) || ehCreditoPelaDescricao(l.descricao);
   if (credito && !/envio de devolu|etiqueta/.test(d)) return "credito";
   if (/devolu[çc][ãa]o|etiqueta|return/.test(d)) return "etiqueta_devolucao";
   if (l.mercado === "SHIPPING" || /envio|frete|shipping/.test(d)) return "frete";
@@ -130,7 +135,7 @@ export function lerLancamento(item: any, periodo: string): Lancamento | null {
   if (!Number.isFinite(valor)) return null;
   const tipo = String(ci.detail_type ?? "CHARGE");
   // Nota de crédito / bonificação vêm como tipos próprios; guardamos crédito como valor negativo
-  const sinal = /CREDIT|BONIF|REFUND/i.test(tipo) ? -1 : 1;
+  const sinal = TIPO_CREDITO.test(tipo) || ehCreditoPelaDescricao(String(ci.transaction_detail ?? "")) ? -1 : 1;
   const base = {
     tipo, subtipo: ci.detail_sub_type ?? null, descricao: String(ci.transaction_detail ?? ""), valor: Math.round(valor * 100) * sinal,
     mercado: item.marketplace_info?.marketplace ?? null,
@@ -145,6 +150,26 @@ export function lerLancamento(item: any, periodo: string): Lancamento | null {
     categoria: classificarLancamento(base),
   };
 }
+
+/** v1.10.3: lançamentos gravados antes de reconhecer bonificação/cancelamento de tarifa como crédito são reclassificados,
+ *  e o faturamento dos últimos períodos é baixado de novo (uma vez só). */
+function reclassificarLancamentosAntigos() {
+  const chave = "faturamento_reclassificado_1103";
+  if (db.prepare("SELECT 1 FROM rotinas_estado WHERE chave = ?").get(chave)) return;
+  const linhas = db.prepare("SELECT detail_id, tipo, subtipo, descricao, valor_centavos, mercado, categoria FROM ml_faturamento").all() as any[];
+  const upd = db.prepare("UPDATE ml_faturamento SET valor_centavos = ?, categoria = ? WHERE detail_id = ?");
+  db.transaction(() => {
+    for (const l of linhas) {
+      const ehCredito = TIPO_CREDITO.test(`${l.tipo} ${l.subtipo ?? ""}`) || ehCreditoPelaDescricao(l.descricao);
+      const valor = ehCredito ? -Math.abs(l.valor_centavos) : l.valor_centavos;
+      const categoria = classificarLancamento({ tipo: l.tipo, subtipo: l.subtipo, descricao: l.descricao, valor, mercado: l.mercado });
+      if (valor !== l.valor_centavos || categoria !== l.categoria) upd.run(valor, categoria, l.detail_id);
+    }
+    db.prepare("DELETE FROM rotinas_estado WHERE chave LIKE 'faturamento_completo:%' OR chave LIKE 'faturamento_dia:%' OR chave = 'faturamento_data'").run();
+    db.prepare("INSERT INTO rotinas_estado (chave, valor) VALUES (?, '1')").run(chave);
+  })();
+}
+reclassificarLancamentosAntigos();
 
 const insLanc = () => db.prepare(
   `INSERT INTO ml_faturamento (detail_id, periodo, pedido, envio_id, tipo, subtipo, descricao, valor_centavos, bruto_centavos, data, mercado, categoria)
@@ -359,7 +384,12 @@ export function contaDa(ocId: number): any | null {
   const etiquetaOrigem = etiquetaConfirmada != null ? "faturamento" : freteDevolucao != null ? (dev?.frete_origem === "manual" ? "devolucao_manual" : "devolucao") : c.etiqueta_prevista_centavos != null ? "mediador" : null;
   // Estorno da tarifa de venda: crédito no faturamento que fala de tarifa de venda / comissão
   const estornoTarifa = -lanc.filter((l) => l.categoria === "credito" && ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo)).reduce((t, l) => t + l.valor_centavos, 0);
-  const creditosFat = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
+  // Cancelamento do frete de ida: na venda desfeita o frete já sai da conta, então esse crédito não soma de novo
+  const vendaDesfeitaPrevia = Boolean(dev && dev.status !== "cancelada") || ["refunded", "charged_back", "cancelled"].includes(String(c.pagamento_status))
+    || (c.preco_centavos > 0 && (c.reembolso_centavos ?? 0) >= c.preco_centavos);
+  const creditoFrete = vendaDesfeitaPrevia
+    ? -lanc.filter((l) => l.categoria === "credito" && /^\s*(cancelamento|estorno|anula)/i.test(l.descricao) && /envio|frete|shipping/i.test(l.descricao) && !/devolu/i.test(l.descricao)).reduce((t, l) => t + l.valor_centavos, 0) : 0;
+  const creditosFat = (lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0) - creditoFrete; // crédito guardado negativo
   // Outros créditos: os do faturamento ou o "recuperado com o ML" digitado na devolução (o maior, para não contar duas vezes)
   const outrosCreditos = Math.max(creditosFat - estornoTarifa, dev?.recuperado_centavos ?? 0);
   const creditos = estornoTarifa + outrosCreditos;

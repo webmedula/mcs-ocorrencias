@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.10.3 — 2026-11-04
+
+- Correção: o estorno da tarifa de venda não era reconhecido quando o ML lança o cancelamento como bonificação (`BONUS`) ou com descrição "Cancelamento de tarifa…". Esses lançamentos agora entram como crédito, e o cancelamento do frete de ida não é contado duas vezes na venda desfeita. Caso MCS-20261026-7HCSAD: a conta passa a dar R$ 0,00, como no ML.
+- Os lançamentos já guardados são reclassificados uma vez ao subir a versão, e o faturamento dos dois últimos períodos é baixado de novo na próxima rotina.
+
 ## v1.10.2 — 2026-11-04
 
 - **Tarifa de venda na devolução: a Central confere se o ML devolveu.** Na venda desfeita, o ML tem de devolver a tarifa de venda. A Central procura o estorno no faturamento do ML (crédito de tarifa de venda/comissão do pedido) e mostra a situação: devolvida, devolvida em parte ou ainda não devolvida, com o valor que falta. Enquanto falta, a tarifa continua como perda no resultado e aparece um aviso no quadro; quando o estorno chega, a conta se ajusta sozinha.
