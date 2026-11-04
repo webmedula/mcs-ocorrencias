@@ -156,7 +156,7 @@ describe("painel", () => {
     expect(lista.itens.find((i: any) => i.protocolo === oc.protocolo).pendencia_ml).toBe("aguardando");
     expect(lista.pendencias).toBeGreaterThan(0);
     const csv = await (await fetch(s.url + "/api/admin/ocorrencias.csv?pendencia=aguardando", { headers: { cookie: s.cookie } })).text();
-    expect(csv.split("\r\n")[0]).toContain(";Resultado MCS (R$);Tarifa não devolvida pelo ML (R$);Pendência ML;Reputação afetada");
+    expect(csv.split("\r\n")[0]).toContain(";Resultado MCS (R$);Cancelamentos ML (R$);Pendência ML;Reputação afetada");
     expect(csv).toContain("Aguardando retorno do Mercado Livre");
     expect(csv).toContain(";25,21;2,33;6,85;");
     const est = await (await s.painel("GET", "/estatisticas?dias=30")).json();

@@ -495,6 +495,8 @@ export async function financeiroBruto(oc: any): Promise<Record<string, unknown>>
   }
   for (const pg of (Array.isArray(ped?.payments) ? ped.payments : []).slice(0, 5)) {
     if (pg?.id) extras.push(tenta(`pagamento_${pg.id}`, `/collections/${encodeURIComponent(String(pg.id))}`));
+    // v1.10.4: pagamento na API v1, com charges_details (tarifa e envio cobrados e o que foi estornado de cada um)
+    if (pg?.id) extras.push(tenta(`pagamento_v1_${pg.id}`, `/v1/payments/${encodeURIComponent(String(pg.id))}`));
   }
   if (ped?.pack_id) extras.push(tenta("pacote", `/packs/${encodeURIComponent(String(ped.pack_id))}`));
   Object.assign(out, Object.fromEntries(await Promise.all(extras)));

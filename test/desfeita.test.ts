@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { db } from "../src/db.js";
-import { contaDa, situacaoDaVenda } from "../src/conta.js";
+import { contaDa, estornosDoPagamento, gravarLancamentos, situacaoDaVenda } from "../src/conta.js";
 
 let n = 0;
 function caso(conta: Record<string, unknown>, devolucao?: { status: string; conferencia?: string | null }) {
@@ -15,22 +15,54 @@ function caso(conta: Record<string, unknown>, devolucao?: { status: string; conf
   return id;
 }
 
-describe("venda desfeita na conta da venda", () => {
-  it("bate com o Recebimento devolvido do ML (MCS-20261026-7HCSAD): fica só a tarifa", () => {
-    const id = caso({ preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" },
-      { status: "encerrada" });
+const pedidoDe = (id: number) => (db.prepare("SELECT pedido FROM ocorrencias WHERE id = ?").get(id) as { pedido: string }).pedido;
+const item = (pedido: string, detail: number, tipo: string, descricao: string, valor: number) => ({
+  charge_info: { detail_id: detail, transaction_detail: descricao, detail_amount: valor, detail_type: tipo, creation_date_time: "2026-11-04T10:00:00" },
+  sales_info: [{ order_id: Number(pedido) }], shipping_info: {}, marketplace_info: { marketplace: "ML" },
+});
+// MCS-20261026-7HCSAD: preço 40,56, tarifa 4,66, frete 7,45, reembolso 40,56
+const CASO = { preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" };
+
+describe("conta da venda igual ao Recebimento do ML (só dados reais)", () => {
+  it("sem cancelamento de tarifa e envio nos dados do ML, eles não entram (preço − tarifa − envio − produto)", () => {
+    const id = caso(CASO, { status: "encerrada" });
     const c = contaDa(id);
-    expect(c.vendaDesfeita).toBe(true);
-    expect(c.totalMl).toBe(-4.66);
-    expect(c.resultado).toBe(-4.66);
+    expect(c).toMatchObject({ cancelamentos: -40.56, tarifaCancelada: null, envioCancelado: null, totalMl: -12.11 });
+  });
+
+  it("com o cancelamento do envio, fica −R$ 4,66 (primeiro print do ML)", () => {
+    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745 }, { status: "encerrada" });
+    expect(contaDa(id)).toMatchObject({ cancelamentos: -33.11, envioCancelado: 7.45, envioCanceladoOrigem: "pagamento", totalMl: -4.66 });
+  });
+
+  it("com tarifa e envio cancelados, fica R$ 0,00 (segundo print do ML)", () => {
+    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745, estorno_tarifa_pag_centavos: 466 }, { status: "encerrada" });
+    expect(contaDa(id)).toMatchObject({ cancelamentos: -28.45, tarifaCancelada: 4.66, totalMl: 0, resultado: 0 });
+  });
+
+  it("os cancelamentos também podem vir do faturamento (bonificação/cancelamento de tarifa), sem contar duas vezes", () => {
+    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745 }, { status: "encerrada" });
+    gravarLancamentos([
+      item(pedidoDe(id), 9100 + id, "BONUS", "Cancelamento de tarifa de venda", 4.66),
+      item(pedidoDe(id), 9200 + id, "CHARGE", "Cancelamento de tarifa do Mercado Envios", 7.45),
+    ], "2026-11");
+    expect(contaDa(id)).toMatchObject({ tarifaCancelada: 4.66, tarifaCanceladaOrigem: "faturamento", envioCancelado: 7.45, totalMl: 0, outrosCreditos: 0 });
   });
 
   it("venda normal continua como antes", () => {
     const id = caso({ preco_centavos: 10000, tarifa_centavos: 1000, frete_ida_centavos: 500, custo_produto_centavos: 3000, custo_origem: "tiny" });
     const c = contaDa(id);
-    expect(c.vendaDesfeita).toBe(false);
     expect(c.totalMl).toBe(85);
     expect(c.resultado).toBe(55);
+  });
+
+  it("lê os estornos do pagamento v1 (charges_details)", () => {
+    expect(estornosDoPagamento({ charges_details: [
+      { name: "meli_fee", type: "fee", accounts: { from: "collector", to: "mp" }, amounts: { original: 4.66, refunded: 4.66 } },
+      { name: "shp_fulfillment", type: "shipping", accounts: { from: "collector", to: "mp" }, amounts: { original: 7.45, refunded: 7.45 } },
+      { name: "financing_fee", type: "fee", accounts: { from: "payer", to: "mp" }, amounts: { original: 3, refunded: 3 } },
+    ] })).toEqual({ tarifa: 466, envio: 745 });
+    expect(estornosDoPagamento({})).toEqual({ tarifa: null, envio: null });
   });
 
   it("custo do produto só entra quando o produto não volta ou volta com problema", () => {
@@ -39,72 +71,16 @@ describe("venda desfeita na conta da venda", () => {
     expect(situacaoDaVenda({ ...base, devolucao: { status: "conferida", conferencia: "ok" } }).custoConta).toBeNull();
     expect(situacaoDaVenda({ ...base, devolucao: { status: "conferida", conferencia: "danificado" } }).custoConta).toBe(3000);
     expect(situacaoDaVenda({ ...base, devolucao: { status: "nao_entregue", conferencia: null } }).custoConta).toBe(3000);
-    expect(situacaoDaVenda({ ...base, devolucao: null }).custoConta).toBe(3000); // reembolso sem devolução: comprador ficou com o produto
+    expect(situacaoDaVenda({ ...base, devolucao: null }).custoConta).toBe(3000);
     expect(situacaoDaVenda({ ...base, custoOrigem: "manual", devolucao: { status: "conferida", conferencia: "ok" } }).custoConta).toBe(3000);
-    // Devolução cancelada e sem reembolso: a venda vale
-    expect(situacaoDaVenda({ ...base, reembolso: 0, pagamentoStatus: "approved", devolucao: { status: "cancelada", conferencia: null } }).desfeita).toBe(false);
   });
 
-  it("devolução em andamento já tira o ganho da venda, mesmo antes do reembolso", () => {
-    const id = caso({ preco_centavos: 10000, tarifa_centavos: 1150, frete_ida_centavos: 900, pagamento_status: "in_mediation", custo_produto_centavos: 3000, custo_origem: "tiny" },
-      { status: "em_transito" });
-    const c = contaDa(id);
-    expect(c.resultado).toBe(-11.5);
-    expect(c.custoConta).toBeNull();
-  });
-});
-
-describe("estorno da tarifa de venda na venda desfeita", () => {
-  const credito = (pedido: string, id: string, descricao: string, valor: number) =>
-    db.prepare(`INSERT INTO ml_faturamento (detail_id, periodo, pedido, tipo, descricao, valor_centavos, categoria) VALUES (?, '2026-11', ?, 'CREDIT', ?, ?, 'credito')`)
-      .run(id, pedido, descricao, valor);
-  const pedidoDe = (id: number) => (db.prepare("SELECT pedido FROM ocorrencias WHERE id = ?").get(id) as { pedido: string }).pedido;
-
-  it("sem estorno no faturamento, avisa que a tarifa está pendente", () => {
-    const id = caso({ preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" }, { status: "encerrada" });
-    expect(contaDa(id)).toMatchObject({ tarifaSituacao: "pendente", tarifaPendente: 4.66, resultado: -4.66 });
-  });
-
-  it("com o estorno no faturamento, a tarifa fica devolvida e o resultado zera", () => {
-    const id = caso({ preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" }, { status: "encerrada" });
-    credito(pedidoDe(id), `T${id}`, "Devolução de tarifa de venda", -466);
-    expect(contaDa(id)).toMatchObject({ tarifaSituacao: "devolvida", tarifaPendente: 0, tarifaEstornada: 4.66, resultado: 0 });
-  });
-
-  it("estorno parcial e crédito de envio não se confundem", () => {
-    const id = caso({ preco_centavos: 10000, tarifa_centavos: 1150, reembolso_centavos: 10000, pagamento_status: "refunded" });
-    credito(pedidoDe(id), `P${id}`, "Tarifa de venda", -500);
-    credito(pedidoDe(id), `E${id}`, "Bonificação de envio", -300);
-    expect(contaDa(id)).toMatchObject({ tarifaSituacao: "parcial", tarifaPendente: 6.5, tarifaEstornada: 5, creditos: 8 });
-  });
-});
-
-describe("custos da devolução entram na conta da venda", () => {
-  it("frete da devolução vira etiqueta, perda vira custo do produto, outros e recuperado entram", () => {
-    const id = caso({ preco_centavos: 10000, tarifa_centavos: 1150, frete_ida_centavos: 900, reembolso_centavos: 10000, pagamento_status: "refunded",
-      custo_produto_centavos: 3000, custo_origem: "tiny" }, { status: "conferida", conferencia: "ok" });
+  it("custos lançados na devolução entram na conta", () => {
+    const id = caso({ ...CASO, estorno_envio_pag_centavos: 745, estorno_tarifa_pag_centavos: 466, custo_produto_centavos: 3000, custo_origem: "tiny" },
+      { status: "conferida", conferencia: "ok" });
     db.prepare("UPDATE devolucoes SET frete_centavos = 2490, frete_origem = 'ml', perda_centavos = 1500, outros_centavos = 200, recuperado_centavos = 1000 WHERE ocorrencia_id = ?").run(id);
     const c = contaDa(id);
-    expect(c).toMatchObject({ etiqueta: 24.9, etiquetaOrigem: "devolucao", custoConta: 15, custoNota: "lançado na devolução", outrosDevolucao: 2, outrosCreditos: 10 });
-    // −tarifa −etiqueta +recuperado −perda −outros
-    expect(c.resultado).toBe(Math.round((-11.5 - 24.9 + 10 - 15 - 2) * 100) / 100);
-  });
-});
-
-describe("cancelamento da tarifa pelo ML (MCS-20261026-7HCSAD, depois do estorno)", () => {
-  it("lançamento de bonificação/cancelamento de tarifa vira crédito e zera a conta, sem contar o frete duas vezes", async () => {
-    const { gravarLancamentos } = await import("../src/conta.js");
-    const id = caso({ preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" }, { status: "encerrada" });
-    const pedido = (db.prepare("SELECT pedido FROM ocorrencias WHERE id = ?").get(id) as { pedido: string }).pedido;
-    const item = (detail: number, tipo: string, descricao: string, valor: number) => ({
-      charge_info: { detail_id: detail, transaction_detail: descricao, detail_amount: valor, detail_type: tipo, creation_date_time: "2026-11-04T10:00:00" },
-      sales_info: [{ order_id: Number(pedido) }], shipping_info: {}, marketplace_info: { marketplace: "ML" },
-    });
-    gravarLancamentos([
-      item(9100 + id, "BONUS", "Cancelamento de tarifa de venda", 4.66),
-      item(9200 + id, "CHARGE", "Cancelamento de tarifa do Mercado Envios", 7.45),
-    ], "2026-11");
-    const c = contaDa(id);
-    expect(c).toMatchObject({ tarifaSituacao: "devolvida", tarifaPendente: 0, totalMl: -4.66, resultado: 0 });
+    expect(c).toMatchObject({ etiqueta: 24.9, etiquetaOrigem: "devolucao", custoConta: 15, outrosDevolucao: 2, outrosCreditos: 10, totalMl: -24.9 });
+    expect(c.resultado).toBe(Math.round((-24.9 + 10 - 15 - 2) * 100) / 100);
   });
 });

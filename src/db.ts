@@ -316,4 +316,10 @@ if (!colunasConta.includes("custo_origem")) {
 if (!colunasConta.includes("custo_tiny_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_centavos INTEGER");
 if (!colunasConta.includes("custo_tiny_json")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_json TEXT");
 if (!colunasConta.includes("custo_tiny_em")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_em TEXT");
+// v1.10.4: situação do pedido no ML (venda cancelada = tarifa de venda cancelada)
+if (!colunasConta.includes("pedido_status")) db.exec("ALTER TABLE conta_venda ADD COLUMN pedido_status TEXT");
+if (!colunasConta.includes("cancelado_em")) db.exec("ALTER TABLE conta_venda ADD COLUMN cancelado_em TEXT");
+// v1.10.4: estornos de tarifa e envio lidos do pagamento (charges_details)
+if (!colunasConta.includes("estorno_tarifa_pag_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN estorno_tarifa_pag_centavos INTEGER");
+if (!colunasConta.includes("estorno_envio_pag_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN estorno_envio_pag_centavos INTEGER");
 if (!colunasConta.includes("custo_tiny_erro")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_erro TEXT");

@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.3 — painel interno
+// Central de Ocorrências v1.10.4 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -613,29 +613,32 @@
     const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
     const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "devolucao" ? " (custo do envio da devolução no ML)"
       : c.etiquetaOrigem === "devolucao_manual" ? " (lançada na devolução)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
-    // Venda desfeita (v1.10.1): preço, tarifa e reembolso aparecem só como informação, sem entrar na conta
-    const fora = (v) => (v == null ? null : { info: v });
-    const desf = c.vendaDesfeita;
-    const custoLinha = c.custoProduto == null ? null : c.custoConta == null ? fora(c.custoProduto) : -c.custoConta;
-    const linhas = [
-      ["Preço do produto", desf ? fora(c.preco) : c.preco, desf ? " (devolvido ao comprador, não entra)" : ""],
-      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa,
-        !desf ? "" : c.tarifaSituacao === "devolvida" ? " (o ML devolveu: veja o estorno abaixo)" : c.tarifaSituacao === "parcial" ? " (o ML devolveu só parte)" : " (o ML tem de devolver; ainda não devolveu)"],
-      ["Estorno da tarifa pelo ML", desf && c.tarifaEstornada ? c.tarifaEstornada : null, " (crédito no faturamento)"],
-      ["Frete de ida (pago pela MCS)", desf ? fora(c.freteIda) : c.freteIda == null ? null : -c.freteIda, desf ? " (cancelado pelo ML, não entra)" : ""],
-      ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
-      ["Reembolso ao comprador", desf ? fora(c.reembolso || null) : c.reembolso == null ? null : -c.reembolso, desf ? " (não entra)" : ""],
-      ["Outros créditos do ML", c.outrosCreditos ? c.outrosCreditos : null, c.recuperadoDevolucao && c.recuperadoDevolucao >= c.outrosCreditos ? " (recuperado, lançado na devolução)" : " (estornos e coberturas no faturamento)"],
-      ["Outros custos da devolução", c.outrosDevolucao ? -c.outrosDevolucao : null, " (lançado na devolução)"],
-      ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
-    ].filter((x) => x[1] != null);
-    const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null),
-      typeof v === "object" ? h("dd", { class: "fora" }, reaisTxt(v.info)) : h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
-    const faixaDesfeita = desf ? h("div", { class: "faixa aviso-f" }, `Venda desfeita: ${c.motivoDesfeita}. Como no "Recebimento devolvido" do ML, o preço e o frete de ida são cancelados. A tarifa de venda o ML tem de devolver; a etiqueta de devolução e o produto (se não voltar bem) ficam com a MCS.`) : null;
-    const faixaTarifa = desf && (c.tarifaSituacao === "pendente" || c.tarifaSituacao === "parcial")
-      ? h("div", { class: "faixa aviso-f" }, `O Mercado Livre ainda não devolveu ${reaisTxt(c.tarifaPendente)} de tarifa de venda. `,
-          `Quando o estorno aparecer no faturamento, a conta se ajusta sozinha. Se demorar, cobre o ML e marque a pendência abaixo.`)
-      : desf && c.tarifaSituacao === "devolvida" ? h("div", { class: "faixa ok" }, "Tarifa de venda devolvida pelo Mercado Livre.") : null;
+    // v1.10.4: mesma ordem do "Recebimento" do ML (preço, tarifa, envios, cancelamentos, total), só com dados reais
+    const origemTxt = (o2) => (o2 === "pagamento" ? " (estorno no pagamento do ML)" : o2 === "faturamento" ? " (crédito no faturamento do ML)" : "");
+    const custoLinha = c.custoProduto == null ? null : c.custoConta == null ? { info: c.custoProduto } : -c.custoConta;
+    const grupo = (titulo, itens) => {
+      const vis = itens.filter((x) => x[1] != null);
+      return vis.length ? [h("dt", { class: "grupo" }, titulo), h("dd", { class: "grupo" }, ""), ...vis.flatMap(([k, v, nota]) => [h("dt", { class: "sub" }, k, nota ? h("small", {}, nota) : null),
+        typeof v === "object" ? h("dd", { class: "fora" }, reaisTxt(v.info)) : h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))])] : [];
+    };
+    const dl = h("dl", { class: "conta-dl" },
+      grupo("Mercado Livre", [
+        ["Preço do produto", c.preco, ""],
+        ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, ""],
+        ["Envio (frete de ida)", c.freteIda == null ? null : -c.freteIda, ""],
+        ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
+      ]),
+      grupo(`Cancelamentos${c.cancelamentos != null ? " " + sinal(c.cancelamentos) : ""}`, [
+        ["Cancelamento do produto", c.cancelProduto ? -c.cancelProduto : null, " (devolvido ao comprador)"],
+        ["Cancelamento da tarifa de venda", c.tarifaCancelada, origemTxt(c.tarifaCanceladaOrigem)],
+        ["Cancelamento da tarifa de envio", c.envioCancelado, origemTxt(c.envioCanceladoOrigem)],
+      ]),
+      grupo("MCS", [
+        ["Outros créditos do ML", c.outrosCreditos ? c.outrosCreditos : null, c.recuperadoDevolucao && c.recuperadoDevolucao >= c.outrosCreditos ? " (recuperado, lançado na devolução)" : " (coberturas e bonificações no faturamento)"],
+        ["Outros custos da devolução", c.outrosDevolucao ? -c.outrosDevolucao : null, " (lançado na devolução)"],
+        ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
+      ]));
+    const faixaDesfeita = c.pedidoCancelado ? h("div", { class: "faixa aviso-f" }, `Venda cancelada pelo Mercado Livre${c.canceladoEm ? ` em ${fmt(c.canceladoEm)}` : ""}.`) : null;
     const total = h("div", { class: "conta-total" },
       h("div", {}, h("span", {}, "Total no Mercado Livre"), h("b", { class: (c.totalMl ?? 0) < 0 ? "neg" : "pos" }, sinal(c.totalMl))),
       h("div", {}, h("span", {}, "Resultado para a MCS"), h("b", { class: (c.resultado ?? 0) < 0 ? "neg" : "pos" }, sinal(c.resultado))));
@@ -700,7 +703,7 @@
           h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
-    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, faixaTarifa, dl, total,
+    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, dl, total,
       dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 

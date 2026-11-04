@@ -32,6 +32,8 @@ export interface ResumoPedido {
   liberacaoEm: string | null;
   envioIdaId: string | null;
   pagamentoIds: string[];
+  pedidoStatus: string | null;  // "cancelled" quando o ML cancela a venda (aí a tarifa de venda é cancelada também)
+  canceladoEm: string | null;
 }
 
 export function resumirPedido(pedido: any): ResumoPedido {
@@ -60,6 +62,8 @@ export function resumirPedido(pedido: any): ResumoPedido {
     liberacaoEm: sqlData(principal?.money_release_date),
     envioIdaId: pedido?.shipping?.id != null ? String(pedido.shipping.id) : null,
     pagamentoIds: pags.map((p) => (p?.id != null ? String(p.id) : null)).filter(Boolean) as string[],
+    pedidoStatus: typeof pedido?.status === "string" ? pedido.status : null,
+    canceladoEm: sqlData(pedido?.cancel_detail?.date),
   };
 }
 
@@ -75,6 +79,23 @@ export function aplicarPagamento(r: ResumoPedido, pagamento: any): ResumoPedido 
   if (pagamento.released != null) out.liberado = pagamento.released === "yes" || pagamento.released === true;
   if (pagamento.money_release_date) out.liberacaoEm = sqlData(pagamento.money_release_date) ?? out.liberacaoEm;
   return out;
+}
+
+/** Estornos que o ML fez ao vendedor, lidos do pagamento v1 (charges_details): tarifa de venda e envio, em centavos.
+ *  Cada cobrança traz amounts.original e amounts.refunded; só contam as pagas pelo vendedor (accounts.from = collector). */
+export function estornosDoPagamento(pagamento: any): { tarifa: number | null; envio: number | null } {
+  const cd: any[] = Array.isArray(pagamento?.charges_details) ? pagamento.charges_details : [];
+  let tarifa: number | null = null, envio: number | null = null;
+  for (const ch of cd) {
+    const ref = ch?.amounts?.refunded;
+    if (typeof ref !== "number") continue;
+    const de = String(ch?.accounts?.from ?? "collector").toLowerCase();
+    if (de && de !== "collector") continue;
+    const nome = `${ch?.name ?? ""} ${ch?.type ?? ""}`.toLowerCase();
+    if (/ship|envio|frete/.test(nome)) envio = (envio ?? 0) + Math.round(ref * 100);
+    else if (/fee|tarifa|comis/.test(nome)) tarifa = (tarifa ?? 0) + Math.round(ref * 100);
+  }
+  return { tarifa, envio };
 }
 
 /** Quanto o vendedor paga de um envio (ida ou volta), em centavos. */
@@ -286,6 +307,12 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
       try { r = aplicarPagamento(r, await ml(`/collections/${encodeURIComponent(r.pagamentoIds[0])}`)); }
       catch (e: any) { console.error(`[conta] pagamento ${r.pagamentoIds[0]}: ${e?.message}`); }
     }
+    // Estornos de tarifa e envio (v1.10.4): pagamento v1, quando houve reembolso ou cancelamento
+    let est: { tarifa: number | null; envio: number | null } = { tarifa: null, envio: null };
+    if (r.pagamentoIds.length && ((r.reembolso ?? 0) > 0 || r.pedidoStatus === "cancelled" || /refund|cancel|charged_back/.test(String(r.pagamentoStatus)))) {
+      try { est = estornosDoPagamento(await ml(`/v1/payments/${encodeURIComponent(r.pagamentoIds[0])}`)); }
+      catch (e: any) { console.error(`[conta] pagamento v1 ${r.pagamentoIds[0]}: ${e?.message}`); }
+    }
     const atual = db.prepare("SELECT * FROM conta_venda WHERE ocorrencia_id = ?").get(ocId) as any | undefined;
     // Frete de ida: consulta uma vez (não muda depois de entregue)
     let freteIda: number | null = atual?.frete_ida_centavos ?? null;
@@ -299,8 +326,8 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
     const reputacaoOrigem = atual?.reputacao_origem === "manual" ? "manual" : med.reputacaoAfetada == null ? atual?.reputacao_origem ?? null : "mediador";
     db.prepare(
       `INSERT INTO conta_venda (ocorrencia_id, preco_centavos, tarifa_centavos, frete_ida_centavos, etiqueta_prevista_centavos, reembolso_centavos, liquido_centavos,
-         pagamento_status, liberado, liberacao_em, reputacao_afetada, reputacao_origem, ml_atualizado_em)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
+         pagamento_status, liberado, liberacao_em, reputacao_afetada, reputacao_origem, pedido_status, cancelado_em, estorno_tarifa_pag_centavos, estorno_envio_pag_centavos, ml_atualizado_em)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
        ON CONFLICT(ocorrencia_id) DO UPDATE SET preco_centavos = excluded.preco_centavos, tarifa_centavos = excluded.tarifa_centavos,
          frete_ida_centavos = COALESCE(excluded.frete_ida_centavos, conta_venda.frete_ida_centavos),
          etiqueta_prevista_centavos = COALESCE(excluded.etiqueta_prevista_centavos, conta_venda.etiqueta_prevista_centavos),
@@ -308,9 +335,13 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
          liquido_centavos = COALESCE(excluded.liquido_centavos, conta_venda.liquido_centavos),
          pagamento_status = COALESCE(excluded.pagamento_status, conta_venda.pagamento_status),
          liberado = COALESCE(excluded.liberado, conta_venda.liberado), liberacao_em = COALESCE(excluded.liberacao_em, conta_venda.liberacao_em),
-         reputacao_afetada = excluded.reputacao_afetada, reputacao_origem = excluded.reputacao_origem, ml_atualizado_em = datetime('now')`,
+         reputacao_afetada = excluded.reputacao_afetada, reputacao_origem = excluded.reputacao_origem,
+         pedido_status = COALESCE(excluded.pedido_status, conta_venda.pedido_status), cancelado_em = COALESCE(excluded.cancelado_em, conta_venda.cancelado_em),
+         estorno_tarifa_pag_centavos = COALESCE(excluded.estorno_tarifa_pag_centavos, conta_venda.estorno_tarifa_pag_centavos),
+         estorno_envio_pag_centavos = COALESCE(excluded.estorno_envio_pag_centavos, conta_venda.estorno_envio_pag_centavos),
+         ml_atualizado_em = datetime('now')`,
     ).run(ocId, r.preco, r.tarifa, freteIda, med.etiquetaPrevista, r.reembolso, r.liquido, r.pagamentoStatus,
-      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem);
+      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem, r.pedidoStatus, r.canceladoEm, est.tarifa, est.envio);
   } catch (e: any) {
     console.error(`[conta] ocorrência ${ocId}: ${e?.message}`);
   }
@@ -359,17 +390,6 @@ export function ehTarifaDeVenda(descricao: string, tipo = "", subtipo: string | 
   return /tarifa de venda|tarifa por venda|sale.?fee|comiss/.test(t) && !/envio|frete|shipping/.test(t);
 }
 
-/** Na venda desfeita o ML deve devolver a tarifa de venda: quanto já voltou e quanto falta (reais). */
-export function estornoDaTarifa(desfeita: boolean, tarifa: number | null, estornado: number) {
-  if (!desfeita || !tarifa) return { tarifaEstornada: estornado ? estornado / 100 : null, tarifaPendente: null, tarifaSituacao: null };
-  const falta = Math.max(0, tarifa - estornado);
-  return {
-    tarifaEstornada: estornado / 100,
-    tarifaPendente: falta ? falta / 100 : 0,
-    tarifaSituacao: falta === 0 ? "devolvida" : estornado > 0 ? "parcial" : "pendente",
-  };
-}
-
 export function contaDa(ocId: number): any | null {
   const c = db.prepare("SELECT c.*, o.pedido FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE c.ocorrencia_id = ?").get(ocId) as any | undefined;
   if (!c) return null;
@@ -382,17 +402,20 @@ export function contaDa(ocId: number): any | null {
   const freteDevolucao = dev && dev.status !== "cancelada" ? dev.frete_centavos ?? null : null;
   const etiqueta = etiquetaConfirmada ?? freteDevolucao ?? c.etiqueta_prevista_centavos ?? null;
   const etiquetaOrigem = etiquetaConfirmada != null ? "faturamento" : freteDevolucao != null ? (dev?.frete_origem === "manual" ? "devolucao_manual" : "devolucao") : c.etiqueta_prevista_centavos != null ? "mediador" : null;
-  // Estorno da tarifa de venda: crédito no faturamento que fala de tarifa de venda / comissão
-  const estornoTarifa = -lanc.filter((l) => l.categoria === "credito" && ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo)).reduce((t, l) => t + l.valor_centavos, 0);
-  // Cancelamento do frete de ida: na venda desfeita o frete já sai da conta, então esse crédito não soma de novo
-  const vendaDesfeitaPrevia = Boolean(dev && dev.status !== "cancelada") || ["refunded", "charged_back", "cancelled"].includes(String(c.pagamento_status))
-    || (c.preco_centavos > 0 && (c.reembolso_centavos ?? 0) >= c.preco_centavos);
-  const creditoFrete = vendaDesfeitaPrevia
-    ? -lanc.filter((l) => l.categoria === "credito" && /^\s*(cancelamento|estorno|anula)/i.test(l.descricao) && /envio|frete|shipping/i.test(l.descricao) && !/devolu/i.test(l.descricao)).reduce((t, l) => t + l.valor_centavos, 0) : 0;
-  const creditosFat = (lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0) - creditoFrete; // crédito guardado negativo
-  // Outros créditos: os do faturamento ou o "recuperado com o ML" digitado na devolução (o maior, para não contar duas vezes)
-  const outrosCreditos = Math.max(creditosFat - estornoTarifa, dev?.recuperado_centavos ?? 0);
-  const creditos = estornoTarifa + outrosCreditos;
+  // v1.10.4: a conta segue o "Recebimento" do ML linha a linha, só com dados reais (sem regra sobre o que o ML devolve):
+  // preço − tarifa de venda − envios + cancelamentos. Cancelamentos = produto devolvido ao comprador (reembolso) +
+  // tarifa de venda cancelada + tarifa de envio cancelada, lidos do pagamento (charges_details) ou do faturamento.
+  const creditoDe = (f: (l: any) => boolean) => -lanc.filter((l) => l.categoria === "credito" && f(l)).reduce((t, l) => t + l.valor_centavos, 0);
+  const ehCancelEnvio = (l: any) => /envio|frete|shipping/i.test(l.descricao) && !/devolu/i.test(l.descricao) && /^\s*(cancelamento|estorno|anula|devolu)/i.test(l.descricao);
+  const tarifaFat = creditoDe((l) => ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo));
+  const envioFat = creditoDe(ehCancelEnvio);
+  const tarifaCancelada = Math.max(tarifaFat, c.estorno_tarifa_pag_centavos ?? 0);
+  const envioCancelado = Math.max(envioFat, c.estorno_envio_pag_centavos ?? 0);
+  const origemCancel = (fat: number, pag: number | null) => (fat <= 0 && !pag ? null : (pag ?? 0) > fat ? "pagamento" : "faturamento");
+  const creditosFat = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
+  // Outros créditos (coberturas, bonificações): os do faturamento ou o "recuperado com o ML" digitado na devolução (o maior)
+  const outrosCreditos = Math.max(creditosFat - tarifaFat - envioFat, dev?.recuperado_centavos ?? 0);
+  const creditos = tarifaCancelada + envioCancelado + outrosCreditos;
   const outrosDevolucao = dev?.outros_centavos ?? 0;
   const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
   const temBase = c.preco_centavos != null;
@@ -403,15 +426,16 @@ export function contaDa(ocId: number): any | null {
   });
   // "Produto perdido ou danificado" lançado na devolução vale como custo do produto
   const v = perdaLancada != null ? { ...sv, custoConta: perdaLancada, custoNota: "lançado na devolução" } : sv;
-  // Venda normal, como o quadro do ML: preço − tarifa − envios − reembolso.
-  // Venda desfeita (v1.10.1), como o "Recebimento devolvido" do ML: o preço volta ao comprador e o frete de ida é
-  // cancelado ("Cancelamento de tarifa do Mercado Envios"). A tarifa de venda o ML também tem de devolver (v1.10.2):
-  // ela fica na conta até o estorno aparecer no faturamento (entra como crédito), e a Central avisa enquanto falta.
-  const totalMl = !temBase ? null : v.desfeita ? -(c.tarifa_centavos ?? 0) - (etiqueta ?? 0) : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios - (c.reembolso_centavos ?? 0);
-  const resultado = totalMl == null ? null : totalMl + creditos - (v.custoConta ?? 0) - outrosDevolucao;
+  const cancelamentos = -(c.reembolso_centavos ?? 0) + tarifaCancelada + envioCancelado;
+  const totalMl = !temBase ? null : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios + cancelamentos;
+  const resultado = totalMl == null ? null : totalMl + outrosCreditos - (v.custoConta ?? 0) - outrosDevolucao;
   return {
     vendaDesfeita: v.desfeita, motivoDesfeita: v.motivo,
-    ...estornoDaTarifa(v.desfeita, c.tarifa_centavos, estornoTarifa),
+    pedidoCancelado: c.pedido_status === "cancelled", canceladoEm: c.cancelado_em ?? null,
+    cancelamentos: temBase ? reais(cancelamentos) : null,
+    cancelProduto: c.reembolso_centavos ? reais(c.reembolso_centavos) : null,
+    tarifaCancelada: tarifaCancelada ? reais(tarifaCancelada) : null, tarifaCanceladaOrigem: origemCancel(tarifaFat, c.estorno_tarifa_pag_centavos),
+    envioCancelado: envioCancelado ? reais(envioCancelado) : null, envioCanceladoOrigem: origemCancel(envioFat, c.estorno_envio_pag_centavos),
     custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
     freteIda: reais(c.frete_ida_centavos),
