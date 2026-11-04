@@ -113,6 +113,8 @@ export interface Lancamento {
   detailId: string; periodo: string; pedido: string | null; envioId: string | null;
   tipo: string; subtipo: string | null; descricao: string; valor: number; bruto: number | null;
   data: string | null; mercado: string | null; categoria: Categoria;
+  /** 1 = já descontado do pagamento da venda; 0 = cobrado à parte (fatura); null = o ML não informou */
+  debitado: number | null;
 }
 export type Categoria = "etiqueta_devolucao" | "frete" | "tarifa_venda" | "credito" | "outro";
 
@@ -152,6 +154,7 @@ export function lerLancamento(item: any, periodo: string): Lancamento | null {
     bruto: cent(item.discount_info?.charge_amount_without_discount),
     data: sqlData(ci.creation_date_time) ?? (typeof ci.creation_date_time === "string" ? ci.creation_date_time.replace("T", " ").slice(0, 19) : null),
     categoria: classificarLancamento(base),
+    debitado: ci.debited_from_operation === "YES" ? 1 : ci.debited_from_operation === "NO" ? 0 : null,
   };
 }
 
@@ -175,10 +178,22 @@ function reclassificarLancamentosAntigos() {
 }
 reclassificarLancamentosAntigos();
 
+/** v1.10.6: baixa o faturamento de novo (uma vez só) para gravar se cada lançamento foi descontado do pagamento ou cobrado à parte. */
+function rebaixarParaDebitado() {
+  const chave = "faturamento_debitado_1106";
+  if (db.prepare("SELECT 1 FROM rotinas_estado WHERE chave = ?").get(chave)) return;
+  db.transaction(() => {
+    db.prepare("DELETE FROM rotinas_estado WHERE chave LIKE 'faturamento_completo:%' OR chave LIKE 'faturamento_dia:%' OR chave = 'faturamento_data'").run();
+    db.prepare("INSERT INTO rotinas_estado (chave, valor) VALUES (?, '1')").run(chave);
+  })();
+}
+rebaixarParaDebitado();
+
 const insLanc = () => db.prepare(
-  `INSERT INTO ml_faturamento (detail_id, periodo, pedido, envio_id, tipo, subtipo, descricao, valor_centavos, bruto_centavos, data, mercado, categoria)
-   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(detail_id) DO UPDATE SET pedido = excluded.pedido, valor_centavos = excluded.valor_centavos, categoria = excluded.categoria, periodo = excluded.periodo`,
+  `INSERT INTO ml_faturamento (detail_id, periodo, pedido, envio_id, tipo, subtipo, descricao, valor_centavos, bruto_centavos, data, mercado, categoria, debitado)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+   ON CONFLICT(detail_id) DO UPDATE SET pedido = excluded.pedido, envio_id = COALESCE(excluded.envio_id, ml_faturamento.envio_id), valor_centavos = excluded.valor_centavos,
+     categoria = excluded.categoria, periodo = excluded.periodo, debitado = COALESCE(excluded.debitado, ml_faturamento.debitado)`,
 );
 
 export function gravarLancamentos(itens: any[], periodo: string): number {
@@ -188,7 +203,7 @@ export function gravarLancamentos(itens: any[], periodo: string): number {
     for (const it of itens) {
       const l = lerLancamento(it, periodo);
       if (!l) continue;
-      ins.run(l.detailId, l.periodo, l.pedido, l.envioId, l.tipo, l.subtipo, l.descricao, l.valor, l.bruto, l.data, l.mercado, l.categoria);
+      ins.run(l.detailId, l.periodo, l.pedido, l.envioId, l.tipo, l.subtipo, l.descricao, l.valor, l.bruto, l.data, l.mercado, l.categoria, l.debitado);
       n++;
     }
   })();
@@ -277,8 +292,14 @@ export function statusFaturamento() {
   return { lancamentos: n.n, pedidos: n.p, ultimaSync: estado("faturamento_sync") || null, ultimoErro: estado("faturamento_erro") || null, emAndamento: Boolean(sincronizandoFat) };
 }
 
-export function lancamentosDoPedido(pedido: string) {
-  return db.prepare("SELECT detail_id, periodo, categoria, tipo, subtipo, descricao, valor_centavos, bruto_centavos, data, envio_id FROM ml_faturamento WHERE pedido = ? ORDER BY data, detail_id").all(pedido) as any[];
+/** Lançamentos do faturamento ligados ao pedido, ou aos envios dele (ida e devolução) quando o ML não traz o pedido na linha. */
+export function lancamentosDoPedido(pedido: string, envios: (string | null | undefined)[] = []) {
+  const ids = [...new Set(envios.filter((e): e is string => Boolean(e)))];
+  const porEnvio = ids.length ? ` OR envio_id IN (${ids.map(() => "?").join(",")})` : "";
+  return db.prepare(
+    `SELECT detail_id, periodo, categoria, tipo, subtipo, descricao, valor_centavos, bruto_centavos, data, envio_id, pedido, debitado
+     FROM ml_faturamento WHERE pedido = ?${porEnvio} ORDER BY data, detail_id`,
+  ).all(pedido, ...ids) as any[];
 }
 
 // ---------- Conta da venda (gravada por ocorrência) ----------
@@ -303,8 +324,8 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
     const reputacaoOrigem = atual?.reputacao_origem === "manual" ? "manual" : med.reputacaoAfetada == null ? atual?.reputacao_origem ?? null : "mediador";
     db.prepare(
       `INSERT INTO conta_venda (ocorrencia_id, preco_centavos, tarifa_centavos, frete_ida_centavos, etiqueta_prevista_centavos, reembolso_centavos, liquido_centavos,
-         pagamento_status, liberado, liberacao_em, reputacao_afetada, reputacao_origem, pedido_status, cancelado_em, estorno_tarifa_pag_centavos, estorno_envio_pag_centavos, ml_atualizado_em)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
+         pagamento_status, liberado, liberacao_em, reputacao_afetada, reputacao_origem, pedido_status, cancelado_em, estorno_tarifa_pag_centavos, estorno_envio_pag_centavos, envio_ida_id, ml_atualizado_em)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now'))
        ON CONFLICT(ocorrencia_id) DO UPDATE SET preco_centavos = excluded.preco_centavos, tarifa_centavos = excluded.tarifa_centavos,
          frete_ida_centavos = COALESCE(excluded.frete_ida_centavos, conta_venda.frete_ida_centavos),
          etiqueta_prevista_centavos = COALESCE(excluded.etiqueta_prevista_centavos, conta_venda.etiqueta_prevista_centavos),
@@ -316,19 +337,28 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
          pedido_status = COALESCE(excluded.pedido_status, conta_venda.pedido_status), cancelado_em = COALESCE(excluded.cancelado_em, conta_venda.cancelado_em),
          estorno_tarifa_pag_centavos = COALESCE(excluded.estorno_tarifa_pag_centavos, conta_venda.estorno_tarifa_pag_centavos),
          estorno_envio_pag_centavos = COALESCE(excluded.estorno_envio_pag_centavos, conta_venda.estorno_envio_pag_centavos),
+         envio_ida_id = COALESCE(excluded.envio_ida_id, conta_venda.envio_ida_id),
          ml_atualizado_em = datetime('now')`,
     ).run(ocId, r.preco, r.tarifa, freteIda, med.etiquetaPrevista, r.reembolso, r.liquido, r.pagamentoStatus,
-      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem, r.pedidoStatus, r.canceladoEm, null, null);
+      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem, r.pedidoStatus, r.canceladoEm, null, null, r.envioIdaId);
+    db.prepare("UPDATE conta_venda SET ml_erro = NULL WHERE ocorrencia_id = ?").run(ocId);
   } catch (e: any) {
     console.error(`[conta] ocorrência ${ocId}: ${e?.message}`);
+    registrarErroConta(ocId, `Falha ao montar a conta: ${String(e?.message ?? e).slice(0, 200)}`);
   }
+}
+
+/** Falha ao montar a conta: fica gravada (aparece no painel) e marca a tentativa, para a rotina não insistir em seguida. */
+export function registrarErroConta(ocId: number, erro: string) {
+  db.prepare("INSERT OR IGNORE INTO conta_venda (ocorrencia_id) VALUES (?)").run(ocId);
+  db.prepare("UPDATE conta_venda SET ml_erro = ?, ml_atualizado_em = datetime('now') WHERE ocorrencia_id = ?").run(erro, ocId);
 }
 
 /** Ocorrências do ML que ainda não têm conta ou cujo dinheiro ainda não foi liberado: vale reconsultar. */
 export function contasPendentes(limite = 20): { id: number; pedido: string }[] {
   return db.prepare(
     `SELECT o.id, o.pedido FROM ocorrencias o LEFT JOIN conta_venda c ON c.ocorrencia_id = o.id
-     WHERE o.origem = 'ml' AND o.anonimizada = 0 AND (c.ocorrencia_id IS NULL OR c.liberado IS NOT 1 OR c.ml_atualizado_em < datetime('now','-1 day'))
+     WHERE (o.origem = 'ml' OR o.ml_claim_id IS NOT NULL) AND o.pedido IS NOT NULL AND o.pedido != '' AND o.anonimizada = 0 AND (c.ocorrencia_id IS NULL OR c.liberado IS NOT 1 OR c.ml_atualizado_em < datetime('now','-1 day'))
        AND (c.ml_atualizado_em IS NULL OR c.ml_atualizado_em < datetime('now','-6 hours'))
      ORDER BY o.criado_em DESC LIMIT ?`,
   ).all(limite) as { id: number; pedido: string }[];
@@ -370,7 +400,8 @@ export function ehTarifaDeVenda(descricao: string, tipo = "", subtipo: string | 
 export function contaDa(ocId: number): any | null {
   const c = db.prepare("SELECT c.*, o.pedido FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE c.ocorrencia_id = ?").get(ocId) as any | undefined;
   if (!c) return null;
-  const lanc = lancamentosDoPedido(c.pedido);
+  const envioVolta = (db.prepare("SELECT envio_id FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as { envio_id: string | null } | undefined)?.envio_id ?? null;
+  const lanc = lancamentosDoPedido(c.pedido, [c.envio_ida_id, envioVolta]);
   const soma = (cat: Categoria) => lanc.filter((l) => l.categoria === cat).reduce((t, l) => t + l.valor_centavos, 0);
   // Custos lançados na devolução (v1.10.2): entram aqui, para a conta ter tudo num lugar só
   const dev = db.prepare("SELECT status, conferencia, frete_centavos, frete_origem, perda_centavos, outros_centavos, recuperado_centavos FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as
@@ -403,7 +434,9 @@ export function contaDa(ocId: number): any | null {
   const outrosCreditos = Math.max(creditosFat - tarifaFat - envioFat, dev?.recuperado_centavos ?? 0);
   const creditos = tarifaCancelada + envioCancelado + tarifasCanceladas + outrosCreditos;
   const outrosDevolucao = dev?.outros_centavos ?? 0;
-  const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
+  // v1.10.6: envio cobrado à parte no faturamento (não saiu do pagamento da venda) também é custo de envio desta venda
+  const freteCobrado = lanc.filter((l) => l.categoria === "frete" && l.debitado === 0 && l.valor_centavos > 0).reduce((t, l) => t + l.valor_centavos, 0);
+  const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0) + freteCobrado;
   const temBase = c.preco_centavos != null;
   const perdaLancada = dev?.perda_centavos ?? null;
   const sv = situacaoDaVenda({
@@ -425,7 +458,7 @@ export function contaDa(ocId: number): any | null {
     tarifaCanceladaOrigem: tarifaCancelada ? origemTarifas : null, envioCanceladoOrigem: envioCancelado ? origemTarifas : null,
     custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
-    freteIda: reais(c.frete_ida_centavos),
+    freteIda: reais(c.frete_ida_centavos), freteCobrado: freteCobrado ? reais(freteCobrado) : null,
     etiqueta: reais(etiqueta), etiquetaOrigem,
     outrosCreditos: reais(outrosCreditos), recuperadoDevolucao: reais(dev?.recuperado_centavos ?? null),
     outrosDevolucao: reais(dev?.outros_centavos ?? null), perdaDevolucao: reais(perdaLancada),
@@ -441,8 +474,8 @@ export function contaDa(ocId: number): any | null {
     pagamentoStatus: c.pagamento_status, liberado: c.liberado == null ? null : Boolean(c.liberado), liberacaoEm: c.liberacao_em,
     pendencia: c.pendencia_ml ?? "nenhuma", pendenciaRotulo: PENDENCIAS_ML[(c.pendencia_ml ?? "nenhuma") as PendenciaMl], pendenciaObs: c.pendencia_obs, pendenciaEm: c.pendencia_em,
     reputacaoAfetada: c.reputacao_afetada == null ? null : Boolean(c.reputacao_afetada), reputacaoOrigem: c.reputacao_origem,
-    atualizadoEm: c.ml_atualizado_em,
-    lancamentos: lanc.map((l) => ({ categoria: l.categoria, descricao: l.descricao, valor: l.valor_centavos / 100, data: l.data, periodo: l.periodo })),
+    atualizadoEm: c.ml_atualizado_em, erroMl: c.ml_erro ?? null,
+    lancamentos: lanc.map((l) => ({ categoria: l.categoria, descricao: l.descricao, valor: l.valor_centavos / 100, data: l.data, periodo: l.periodo, debitado: l.debitado == null ? null : Boolean(l.debitado) })),
   };
 }
 

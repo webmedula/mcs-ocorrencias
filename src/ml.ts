@@ -9,7 +9,7 @@ import { gerarProtocolo } from "./protocol.js";
 import { buscarPedido } from "./tiny.js";
 import { guardarFoto, type Produto } from "./produtos.js";
 import { sincronizarDevolucao, precisaVerDevolucao } from "./devolucoes.js";
-import { atualizarContaVenda, contasPendentes } from "./conta.js";
+import { atualizarContaVenda, contaDa, contasPendentes, lancamentosDoPedido, registrarErroConta, statusFaturamento } from "./conta.js";
 import { atualizarCustoTiny } from "./custo.js";
 
 export function statusConexao() {
@@ -419,7 +419,18 @@ export async function enviarMensagem(oc: any, texto: string, autor: string): Pro
 
 async function atualizarConta(ocId: number, pedido: string, vendedor: string): Promise<void> {
   try { await atualizarContaVenda(ocId, await ml(`/orders/${encodeURIComponent(pedido)}`), vendedor); }
-  catch (e: any) { console.error(`[conta] pedido ${pedido}: ${e?.message}`); }
+  catch (e: any) {
+    console.error(`[conta] pedido ${pedido}: ${e?.message}`);
+    // v1.10.6: guarda o erro para aparecer no painel (e não reconsultar em seguida)
+    registrarErroConta(ocId, `Não consegui ler o pedido no Mercado Livre: ${String(e?.message ?? e).slice(0, 200)}`);
+  }
+}
+
+/** Botão "Atualizar do Mercado Livre" da conta da venda (v1.10.6). */
+export async function atualizarContaAgora(oc: { id: number; pedido: string }): Promise<void> {
+  const c = conexao();
+  if (!c) throw new MlErro(409, "Mercado Livre não conectado.");
+  await atualizarConta(oc.id, oc.pedido, c.user_id);
 }
 
 /** Reconsulta a conta de algumas ocorrências do ML por rodada (dinheiro ainda retido, ou conta antiga/inexistente). */
@@ -498,6 +509,12 @@ export async function financeiroBruto(oc: any): Promise<Record<string, unknown>>
   }
   if (ped?.pack_id) extras.push(tenta("pacote", `/packs/${encodeURIComponent(String(ped.pack_id))}`));
   Object.assign(out, Object.fromEntries(await Promise.all(extras)));
+  // v1.10.6: o que o sistema já guardou do faturamento (sincronizado página a página) e a conta como está calculada
+  out.faturamento_guardado = {
+    sincronizacao: statusFaturamento(),
+    lancamentos: lancamentosDoPedido(pedido, [...envios]),
+  };
+  if (oc.id != null) out.conta_calculada = contaDa(Number(oc.id));
   return { versao: config.version, consultado_em: new Date().toISOString(), pedido, claim_id: claimId, respostas: out };
 }
 

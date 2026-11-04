@@ -80,3 +80,25 @@ describe("conta da venda igual ao Recebimento do ML (só dados reais)", () => {
     expect(c.resultado).toBe(Math.round((-24.9 + 10 - 15 - 2) * 100) / 100);
   });
 });
+
+describe("v1.10.6: faturamento descontado do pagamento ou cobrado à parte", () => {
+  const envioItem = (pedido: string | null, envio: string, detail: number, descricao: string, valor: number, debitado: "YES" | "NO") => ({
+    charge_info: { detail_id: detail, transaction_detail: descricao, detail_amount: valor, detail_type: "CHARGE", creation_date_time: "2026-11-04T10:00:00", debited_from_operation: debitado },
+    sales_info: pedido ? [{ order_id: Number(pedido) }] : null, shipping_info: { shipping_id: envio }, marketplace_info: { marketplace: "SHIPPING" },
+  });
+
+  it("envio cobrado à parte entra nos envios; o já descontado do pagamento não conta duas vezes", () => {
+    const id = caso({ preco_centavos: 39892, tarifa_centavos: 3192, frete_ida_centavos: 2705, envio_ida_id: `IDA${id0()}` });
+    const ida = (db.prepare("SELECT envio_ida_id FROM conta_venda WHERE ocorrencia_id = ?").get(id) as any).envio_ida_id;
+    gravarLancamentos([
+      envioItem(pedidoDe(id), ida, 9300 + id, "Tarifa de envio", 27.05, "YES"),
+      envioItem(null, ida, 9400 + id, "Tarifa de envio extra", 54.1, "NO"), // sem o pedido na linha: acha pelo envio
+    ], "2026-11");
+    const c = contaDa(id);
+    expect(c).toMatchObject({ freteIda: 27.05, freteCobrado: 54.1, envios: 81.15 });
+    expect(c.lancamentos.map((l: any) => l.debitado)).toEqual([true, false]);
+  });
+});
+
+let k = 0;
+function id0() { return ++k; }

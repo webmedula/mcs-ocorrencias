@@ -322,4 +322,10 @@ if (!colunasConta.includes("cancelado_em")) db.exec("ALTER TABLE conta_venda ADD
 // v1.10.4: estornos de tarifa e envio lidos do pagamento (charges_details)
 if (!colunasConta.includes("estorno_tarifa_pag_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN estorno_tarifa_pag_centavos INTEGER");
 if (!colunasConta.includes("estorno_envio_pag_centavos")) db.exec("ALTER TABLE conta_venda ADD COLUMN estorno_envio_pag_centavos INTEGER");
+if (!colunasConta.includes("ml_erro")) db.exec("ALTER TABLE conta_venda ADD COLUMN ml_erro TEXT");
 if (!colunasConta.includes("custo_tiny_erro")) db.exec("ALTER TABLE conta_venda ADD COLUMN custo_tiny_erro TEXT");
+// v1.10.6: lançamento do faturamento já descontado do pagamento ("debited_from_operation") ou cobrado à parte
+const colunasFat = (db.prepare("PRAGMA table_info(ml_faturamento)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasFat.includes("debitado")) db.exec("ALTER TABLE ml_faturamento ADD COLUMN debitado INTEGER");
+if (!colunasConta.includes("envio_ida_id")) db.exec("ALTER TABLE conta_venda ADD COLUMN envio_ida_id TEXT");
+db.exec("CREATE INDEX IF NOT EXISTS idx_fat_envio ON ml_faturamento(envio_id)");

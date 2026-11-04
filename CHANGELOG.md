@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.6 — 2026-11-04
+
+- **Conta da venda sem dados agora explica o motivo.** Se a leitura do pedido no Mercado Livre falhar, o erro fica gravado e aparece na conta; e há o botão **"Atualizar do Mercado Livre"** para ler de novo na hora. Sem erro e ainda sem valores, a conta avisa que o ML ainda não foi lido.
+- A rotina não para mais no meio: cada etapa (prazos, Tiny, contas, faturamento…) roda isolada, e a falha de uma não impede a conta da venda de ser atualizada. Ocorrências com reclamação do ML entram na rotina da conta mesmo que tenham outra origem.
+- **Faturamento: descontado do pagamento ou cobrado à parte.** Cada lançamento passa a guardar se o ML já tirou o valor do pagamento da venda (`debited_from_operation`) ou se cobrou à parte. Envio cobrado à parte entra nos Envios da conta ("Envio cobrado à parte (faturamento)"); o que já saiu do pagamento não conta duas vezes. Os lançamentos também são achados pelo envio (ida e devolução) quando a linha do ML não traz o pedido. O faturamento é baixado de novo uma vez para gravar essa informação.
+- O arquivo de dados brutos do ML passa a trazer os lançamentos do faturamento já guardados para o pedido e a conta como está calculada.
+
 ## v1.10.5 — 2026-11-04
 
 - **Cancelamentos pelo pagamento do ML.** No reembolso total, o ML só tira da MCS o líquido que ela recebeu (`net_received_amount` do pagamento); a diferença entre o reembolso e o líquido são as tarifas que o ML cancelou. A conta usa esse dado real: quando a diferença é exatamente tarifa de venda + envio, mostra as duas linhas; senão, mostra "Tarifas canceladas pelo ML" numa linha só. O faturamento continua valendo quando traz os lançamentos. Caso MCS-20261026-7HCSAD: Cancelamentos −R$ 28,45, Total R$ 0,00, igual ao ML.
