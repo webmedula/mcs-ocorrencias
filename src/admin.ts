@@ -228,7 +228,7 @@ admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
     ["Protocolo", "Aberta em", "Origem", "Canal", "Pedido", "Assunto", "Status", "Responsável", "Cliente", "E-mail", "Telefone", "Fotos",
       "Desfecho", "Custo (R$)", "Resolvida em", "Prazo ML", "Nota (1-5)", "Tiny", "Atualizada em",
       "Devolução", "Custo devolução (R$)", "Preço produto (R$)", "Tarifa venda (R$)", "Frete ida (R$)", "Etiqueta devolução (R$)", "Reembolso comprador (R$)",
-      "Créditos ML (R$)", "Custo produto (R$)", "Total ML (R$)", "Resultado MCS (R$)", "Pendência ML", "Reputação afetada"],
+      "Créditos ML (R$)", "Custo produto (R$)", "Total ML (R$)", "Resultado MCS (R$)", "Tarifa não devolvida pelo ML (R$)", "Pendência ML", "Reputação afetada"],
     linhas.map((o) => [
       o.protocolo, dataLocal(o.criado_em), o.origem === "ml" ? "Mercado Livre (reclamação)" : "Formulário", CANAIS[o.canal as keyof typeof CANAIS] ?? o.canal,
       o.pedido, TIPOS[o.tipo as keyof typeof TIPOS] ?? o.tipo, STATUS[o.status as Status] ?? o.status, o.responsavel, o.nome, o.email, o.telefone, o.fotos,
@@ -236,7 +236,7 @@ admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
       o.nota ?? "", o.tiny_status, dataLocal(o.atualizado_em),
       o.devolucao ? STATUS_DEVOLUCAO[o.devolucao as keyof typeof STATUS_DEVOLUCAO] ?? o.devolucao : "", o.devolucao ? reais(o.custo_devolucao) : "",
       r2(contas.get(o.id)?.preco), r2(contas.get(o.id)?.tarifa), r2(contas.get(o.id)?.freteIda), r2(contas.get(o.id)?.etiqueta), r2(contas.get(o.id)?.reembolso),
-      r2(contas.get(o.id)?.creditos), r2(contas.get(o.id)?.custoProduto), r2(contas.get(o.id)?.totalMl), r2(contas.get(o.id)?.resultado),
+      r2(contas.get(o.id)?.creditos), r2(contas.get(o.id)?.custoProduto), r2(contas.get(o.id)?.totalMl), r2(contas.get(o.id)?.resultado), r2(contas.get(o.id)?.tarifaPendente ?? null),
       o.pendencia_ml ? PENDENCIAS_ML[o.pendencia_ml as PendenciaMl] ?? o.pendencia_ml : "", o.reputacao_afetada == null ? "" : o.reputacao_afetada ? "Sim" : "Não",
     ]),
   );
@@ -811,15 +811,16 @@ function contaAgrupada(desde: string, chave: (o: { criado_em: string; produto_js
 }
 function contaTotais(desde: string) {
   const ids = db.prepare("SELECT c.ocorrencia_id id FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)").all(desde) as { id: number }[];
-  let custo = 0, vendas = 0, reembolsos = 0, envios = 0, creditos = 0;
+  let custo = 0, vendas = 0, reembolsos = 0, envios = 0, creditos = 0, tarifasPendentes = 0, casosTarifaPendente = 0;
   for (const { id } of ids) {
     const c = contaDa(id);
     if (!c) continue;
     if (c.resultado != null) custo -= c.resultado;
     vendas += c.preco ?? 0; reembolsos += c.reembolso ?? 0; envios += c.envios ?? 0; creditos += c.creditos ?? 0;
+    if (c.tarifaPendente) { tarifasPendentes += c.tarifaPendente; casosTarifaPendente++; }
   }
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  return { custo: r2(custo), vendas: r2(vendas), reembolsos: r2(reembolsos), envios: r2(envios), creditos: r2(creditos) };
+  return { custo: r2(custo), vendas: r2(vendas), reembolsos: r2(reembolsos), envios: r2(envios), creditos: r2(creditos), tarifasPendentes: r2(tarifasPendentes), casosTarifaPendente };
 }
 
 // ---------- QR code por canal (v1.3.0) ----------

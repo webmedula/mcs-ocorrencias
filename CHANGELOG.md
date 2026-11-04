@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.10.2 — 2026-11-04
+
+- **Tarifa de venda na devolução: a Central confere se o ML devolveu.** Na venda desfeita, o ML tem de devolver a tarifa de venda. A Central procura o estorno no faturamento do ML (crédito de tarifa de venda/comissão do pedido) e mostra a situação: devolvida, devolvida em parte ou ainda não devolvida, com o valor que falta. Enquanto falta, a tarifa continua como perda no resultado e aparece um aviso no quadro; quando o estorno chega, a conta se ajusta sozinha.
+- Aba Números: novo indicador **Tarifas que o ML ainda não devolveu** (valor e quantidade de casos). CSV: coluna "Tarifa não devolvida pelo ML (R$)".
+
 ## v1.10.1 — 2026-11-04
 
 - **Conta da venda em devolução bate com o "Recebimento devolvido" do ML.** Quando a venda é desfeita (há devolução, ou o dinheiro voltou todo ao comprador), o preço do produto não conta mais como ganho e o frete de ida sai da conta, porque o ML cancela os dois. Fica a tarifa de venda, a etiqueta de devolução (quando houver) e o custo do produto, se for o caso. Exemplo: MCS-20261026-7HCSAD passa de −R$ 12,11 para −R$ 4,66, como no ML.

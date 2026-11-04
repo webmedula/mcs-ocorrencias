@@ -328,6 +328,23 @@ export function situacaoDaVenda(e: EntradaSituacao): { desfeita: boolean; motivo
   return { desfeita, motivo, custoConta: null, custoNota: "não entra por enquanto: só conta se o produto não voltar ou voltar com problema" };
 }
 
+/** Lançamento do faturamento que é tarifa de venda (comissão), e não envio. */
+export function ehTarifaDeVenda(descricao: string, tipo = "", subtipo: string | null = ""): boolean {
+  const t = `${descricao} ${tipo} ${subtipo ?? ""}`.toLowerCase();
+  return /tarifa de venda|tarifa por venda|sale.?fee|comiss/.test(t) && !/envio|frete|shipping/.test(t);
+}
+
+/** Na venda desfeita o ML deve devolver a tarifa de venda: quanto já voltou e quanto falta (reais). */
+export function estornoDaTarifa(desfeita: boolean, tarifa: number | null, estornado: number) {
+  if (!desfeita || !tarifa) return { tarifaEstornada: estornado ? estornado / 100 : null, tarifaPendente: null, tarifaSituacao: null };
+  const falta = Math.max(0, tarifa - estornado);
+  return {
+    tarifaEstornada: estornado / 100,
+    tarifaPendente: falta ? falta / 100 : 0,
+    tarifaSituacao: falta === 0 ? "devolvida" : estornado > 0 ? "parcial" : "pendente",
+  };
+}
+
 export function contaDa(ocId: number): any | null {
   const c = db.prepare("SELECT c.*, o.pedido FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE c.ocorrencia_id = ?").get(ocId) as any | undefined;
   if (!c) return null;
@@ -336,6 +353,8 @@ export function contaDa(ocId: number): any | null {
   const etiquetaConfirmada = lanc.some((l) => l.categoria === "etiqueta_devolucao") ? soma("etiqueta_devolucao") : null;
   const etiqueta = etiquetaConfirmada ?? c.etiqueta_prevista_centavos ?? null;
   const creditos = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
+  // Estorno da tarifa de venda (v1.10.2): crédito no faturamento que fala de tarifa de venda / comissão
+  const estornoTarifa = -lanc.filter((l) => l.categoria === "credito" && ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo)).reduce((t, l) => t + l.valor_centavos, 0);
   const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
   const temBase = c.preco_centavos != null;
   const dev = db.prepare("SELECT status, conferencia FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as { status: string; conferencia: string | null } | undefined;
@@ -345,11 +364,13 @@ export function contaDa(ocId: number): any | null {
   });
   // Venda normal, como o quadro do ML: preço − tarifa − envios − reembolso.
   // Venda desfeita (v1.10.1), como o "Recebimento devolvido" do ML: o preço volta ao comprador e o frete de ida é
-  // cancelado ("Cancelamento de tarifa do Mercado Envios"); fica a tarifa de venda e, se houver, a etiqueta de devolução.
+  // cancelado ("Cancelamento de tarifa do Mercado Envios"). A tarifa de venda o ML também tem de devolver (v1.10.2):
+  // ela fica na conta até o estorno aparecer no faturamento (entra como crédito), e a Central avisa enquanto falta.
   const totalMl = !temBase ? null : v.desfeita ? -(c.tarifa_centavos ?? 0) - (etiqueta ?? 0) : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios - (c.reembolso_centavos ?? 0);
   const resultado = totalMl == null ? null : totalMl + creditos - (v.custoConta ?? 0);
   return {
     vendaDesfeita: v.desfeita, motivoDesfeita: v.motivo,
+    ...estornoDaTarifa(v.desfeita, c.tarifa_centavos, estornoTarifa),
     custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
     freteIda: reais(c.frete_ida_centavos),

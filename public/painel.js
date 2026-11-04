@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.1 — painel interno
+// Central de Ocorrências v1.10.2 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -618,16 +618,22 @@
     const custoLinha = c.custoProduto == null ? null : c.custoConta == null ? fora(c.custoProduto) : -c.custoConta;
     const linhas = [
       ["Preço do produto", desf ? fora(c.preco) : c.preco, desf ? " (devolvido ao comprador, não entra)" : ""],
-      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, desf ? " (o ML não devolve)" : ""],
+      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa,
+        !desf ? "" : c.tarifaSituacao === "devolvida" ? " (o ML devolveu: veja o estorno abaixo)" : c.tarifaSituacao === "parcial" ? " (o ML devolveu só parte)" : " (o ML tem de devolver; ainda não devolveu)"],
+      ["Estorno da tarifa pelo ML", desf && c.tarifaEstornada ? c.tarifaEstornada : null, " (crédito no faturamento)"],
       ["Frete de ida (pago pela MCS)", desf ? fora(c.freteIda) : c.freteIda == null ? null : -c.freteIda, desf ? " (cancelado pelo ML, não entra)" : ""],
       ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
       ["Reembolso ao comprador", desf ? fora(c.reembolso || null) : c.reembolso == null ? null : -c.reembolso, desf ? " (não entra)" : ""],
-      ["Créditos do ML", c.creditos ? c.creditos : null, " (estornos e coberturas no faturamento)"],
+      ["Outros créditos do ML", c.creditos && (c.creditos - (desf ? c.tarifaEstornada || 0 : 0)) ? Math.round((c.creditos - (desf ? c.tarifaEstornada || 0 : 0)) * 100) / 100 : null, " (estornos e coberturas no faturamento)"],
       ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
     ].filter((x) => x[1] != null);
     const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null),
       typeof v === "object" ? h("dd", { class: "fora" }, reaisTxt(v.info)) : h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
-    const faixaDesfeita = desf ? h("div", { class: "faixa aviso-f" }, `Venda desfeita: ${c.motivoDesfeita}. Como no "Recebimento devolvido" do ML, o preço e o frete de ida são cancelados; fica a tarifa de venda, a etiqueta de devolução e o produto, se ele não voltar bem.`) : null;
+    const faixaDesfeita = desf ? h("div", { class: "faixa aviso-f" }, `Venda desfeita: ${c.motivoDesfeita}. Como no "Recebimento devolvido" do ML, o preço e o frete de ida são cancelados. A tarifa de venda o ML tem de devolver; a etiqueta de devolução e o produto (se não voltar bem) ficam com a MCS.`) : null;
+    const faixaTarifa = desf && (c.tarifaSituacao === "pendente" || c.tarifaSituacao === "parcial")
+      ? h("div", { class: "faixa aviso-f" }, `O Mercado Livre ainda não devolveu ${reaisTxt(c.tarifaPendente)} de tarifa de venda. `,
+          `Quando o estorno aparecer no faturamento, a conta se ajusta sozinha. Se demorar, cobre o ML e marque a pendência abaixo.`)
+      : desf && c.tarifaSituacao === "devolvida" ? h("div", { class: "faixa ok" }, "Tarifa de venda devolvida pelo Mercado Livre.") : null;
     const total = h("div", { class: "conta-total" },
       h("div", {}, h("span", {}, "Total no Mercado Livre"), h("b", { class: (c.totalMl ?? 0) < 0 ? "neg" : "pos" }, sinal(c.totalMl))),
       h("div", {}, h("span", {}, "Resultado para a MCS"), h("b", { class: (c.resultado ?? 0) < 0 ? "neg" : "pos" }, sinal(c.resultado))));
@@ -691,7 +697,7 @@
           h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
-    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, dl, total,
+    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, faixaTarifa, dl, total,
       dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 
@@ -833,6 +839,7 @@
     for (const [rot, val, cls] of [["Reclamações do ML com conta", cm.casos ?? 0, "em_analise"], ["Custo para a MCS", moeda(cm.custo) || "R$ 0,00", "nova"],
       ["Vendido nesses pedidos", moeda(cm.vendas) || "R$ 0,00", "resolvida"], ["Reembolsado aos compradores", moeda(cm.reembolsos) || "R$ 0,00", "nova"],
       ["Envios (ida + etiqueta)", moeda(cm.envios) || "R$ 0,00", "aguardando_cliente"], ["Créditos do ML", moeda(cm.creditos) || "R$ 0,00", "resolvida"],
+      ["Tarifas que o ML ainda não devolveu", `${moeda(cm.tarifasPendentes) || "R$ 0,00"} (${cm.casosTarifaPendente ?? 0})`, "nova"],
       ["Reputação afetada", cm.reputacao ?? 0, "nova"], ["Aguardando retorno do ML", (cm.pendencias || []).find((x) => x.k === "aguardando")?.n ?? 0, "aguardando_cliente"]])
       nc.append(h("div", { class: "kpi " + cls }, rot, h("b", {}, String(val))));
     barras($("#g-conta-mes"), (cm.porMes || []).map((x) => ({ rotulo: `${x.k.slice(5, 7)}/${x.k.slice(0, 4)} (${x.n})`, n: Math.max(0, Math.round((x.custo || 0) * 100) / 100) })));
