@@ -532,7 +532,7 @@
     const custoMsg = h("p", { class: "msg-ok oculto", role: "status" });
     const formCusto = h("form", { class: "acao", novalidate: true },
       h("h3", {}, "Custos da devolução"),
-      h("p", { class: "aviso" }, `Custo total: ${c.total != null ? reaisTxt(c.total) : "ainda não lançado"} (frete + produto perdido + outros − recuperado).`),
+      h("p", { class: "aviso" }, "Esses valores entram na Conta da venda: frete da devolução como etiqueta, produto perdido como custo do produto, outros custos e o recuperado com o ML."),
       lFrete, iFrete, lPerda, iPerda, lOutros, iOutros, lReemb, iReemb, lRec, iRec, custoMsg,
       h("button", { type: "submit", class: "sec mini" }, "Salvar custos"));
     formCusto.addEventListener("submit", async (ev) => {
@@ -611,7 +611,8 @@
     const c = o.conta;
     if (!c) return o.origem === "ml" ? h("p", { class: "aviso" }, "Conta da venda ainda não consultada no Mercado Livre. Ela é montada sozinha na próxima sincronização.") : null;
     const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
-    const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
+    const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "devolucao" ? " (custo do envio da devolução no ML)"
+      : c.etiquetaOrigem === "devolucao_manual" ? " (lançada na devolução)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
     // Venda desfeita (v1.10.1): preço, tarifa e reembolso aparecem só como informação, sem entrar na conta
     const fora = (v) => (v == null ? null : { info: v });
     const desf = c.vendaDesfeita;
@@ -624,7 +625,8 @@
       ["Frete de ida (pago pela MCS)", desf ? fora(c.freteIda) : c.freteIda == null ? null : -c.freteIda, desf ? " (cancelado pelo ML, não entra)" : ""],
       ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
       ["Reembolso ao comprador", desf ? fora(c.reembolso || null) : c.reembolso == null ? null : -c.reembolso, desf ? " (não entra)" : ""],
-      ["Outros créditos do ML", c.creditos && (c.creditos - (desf ? c.tarifaEstornada || 0 : 0)) ? Math.round((c.creditos - (desf ? c.tarifaEstornada || 0 : 0)) * 100) / 100 : null, " (estornos e coberturas no faturamento)"],
+      ["Outros créditos do ML", c.outrosCreditos ? c.outrosCreditos : null, c.recuperadoDevolucao && c.recuperadoDevolucao >= c.outrosCreditos ? " (recuperado, lançado na devolução)" : " (estornos e coberturas no faturamento)"],
+      ["Outros custos da devolução", c.outrosDevolucao ? -c.outrosDevolucao : null, " (lançado na devolução)"],
       ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
     ].filter((x) => x[1] != null);
     const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null),
@@ -668,7 +670,8 @@
     // Edição: custo do produto, pendência, reputação
     const custoInicial = emReais(c.custoProduto);
     const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: custoInicial });
-    const etiq = h("input", { type: "text", id: "ct-etiq", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: c.etiquetaOrigem === "faturamento" ? "" : emReais(c.etiqueta), disabled: c.etiquetaOrigem === "faturamento" });
+    const etiq = h("input", { type: "text", id: "ct-etiq", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: c.etiquetaOrigem === "mediador" || c.etiquetaOrigem == null ? emReais(c.etiqueta) : "", disabled: !(c.etiquetaOrigem === "mediador" || c.etiquetaOrigem == null),
+      title: c.etiquetaOrigem === "faturamento" ? "Confirmada no faturamento do ML" : String(c.etiquetaOrigem || "").startsWith("devolucao") ? "Vem do frete da devolução (edite no quadro da devolução)" : "" });
     const pend = h("select", { id: "ct-pend" }, Object.entries(PENDENCIA).map(([k, v]) => h("option", { value: k, selected: k === c.pendencia }, v)));
     const obs = h("input", { type: "text", id: "ct-obs", maxlength: "500", placeholder: "Ex.: pedi cobertura em 31/10", value: c.pendenciaObs || "" });
     const rep = h("select", { id: "ct-rep" }, h("option", { value: "", selected: c.reputacaoAfetada == null }, "Não informado"),

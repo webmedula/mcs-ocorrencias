@@ -78,3 +78,15 @@ describe("estorno da tarifa de venda na venda desfeita", () => {
     expect(contaDa(id)).toMatchObject({ tarifaSituacao: "parcial", tarifaPendente: 6.5, tarifaEstornada: 5, creditos: 8 });
   });
 });
+
+describe("custos da devolução entram na conta da venda", () => {
+  it("frete da devolução vira etiqueta, perda vira custo do produto, outros e recuperado entram", () => {
+    const id = caso({ preco_centavos: 10000, tarifa_centavos: 1150, frete_ida_centavos: 900, reembolso_centavos: 10000, pagamento_status: "refunded",
+      custo_produto_centavos: 3000, custo_origem: "tiny" }, { status: "conferida", conferencia: "ok" });
+    db.prepare("UPDATE devolucoes SET frete_centavos = 2490, frete_origem = 'ml', perda_centavos = 1500, outros_centavos = 200, recuperado_centavos = 1000 WHERE ocorrencia_id = ?").run(id);
+    const c = contaDa(id);
+    expect(c).toMatchObject({ etiqueta: 24.9, etiquetaOrigem: "devolucao", custoConta: 15, custoNota: "lançado na devolução", outrosDevolucao: 2, outrosCreditos: 10 });
+    // −tarifa −etiqueta +recuperado −perda −outros
+    expect(c.resultado).toBe(Math.round((-11.5 - 24.9 + 10 - 15 - 2) * 100) / 100);
+  });
+});

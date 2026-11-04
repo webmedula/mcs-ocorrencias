@@ -350,31 +350,44 @@ export function contaDa(ocId: number): any | null {
   if (!c) return null;
   const lanc = lancamentosDoPedido(c.pedido);
   const soma = (cat: Categoria) => lanc.filter((l) => l.categoria === cat).reduce((t, l) => t + l.valor_centavos, 0);
+  // Custos lançados na devolução (v1.10.2): entram aqui, para a conta ter tudo num lugar só
+  const dev = db.prepare("SELECT status, conferencia, frete_centavos, frete_origem, perda_centavos, outros_centavos, recuperado_centavos FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as
+    { status: string; conferencia: string | null; frete_centavos: number | null; frete_origem: string | null; perda_centavos: number | null; outros_centavos: number | null; recuperado_centavos: number | null } | undefined;
   const etiquetaConfirmada = lanc.some((l) => l.categoria === "etiqueta_devolucao") ? soma("etiqueta_devolucao") : null;
-  const etiqueta = etiquetaConfirmada ?? c.etiqueta_prevista_centavos ?? null;
-  const creditos = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
-  // Estorno da tarifa de venda (v1.10.2): crédito no faturamento que fala de tarifa de venda / comissão
+  const freteDevolucao = dev && dev.status !== "cancelada" ? dev.frete_centavos ?? null : null;
+  const etiqueta = etiquetaConfirmada ?? freteDevolucao ?? c.etiqueta_prevista_centavos ?? null;
+  const etiquetaOrigem = etiquetaConfirmada != null ? "faturamento" : freteDevolucao != null ? (dev?.frete_origem === "manual" ? "devolucao_manual" : "devolucao") : c.etiqueta_prevista_centavos != null ? "mediador" : null;
+  // Estorno da tarifa de venda: crédito no faturamento que fala de tarifa de venda / comissão
   const estornoTarifa = -lanc.filter((l) => l.categoria === "credito" && ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo)).reduce((t, l) => t + l.valor_centavos, 0);
+  const creditosFat = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
+  // Outros créditos: os do faturamento ou o "recuperado com o ML" digitado na devolução (o maior, para não contar duas vezes)
+  const outrosCreditos = Math.max(creditosFat - estornoTarifa, dev?.recuperado_centavos ?? 0);
+  const creditos = estornoTarifa + outrosCreditos;
+  const outrosDevolucao = dev?.outros_centavos ?? 0;
   const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
   const temBase = c.preco_centavos != null;
-  const dev = db.prepare("SELECT status, conferencia FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as { status: string; conferencia: string | null } | undefined;
-  const v = situacaoDaVenda({
+  const perdaLancada = dev?.perda_centavos ?? null;
+  const sv = situacaoDaVenda({
     preco: c.preco_centavos, reembolso: c.reembolso_centavos, pagamentoStatus: c.pagamento_status,
     devolucao: dev ?? null, custo: c.custo_produto_centavos, custoOrigem: c.custo_produto_centavos == null ? null : c.custo_origem ?? "manual",
   });
+  // "Produto perdido ou danificado" lançado na devolução vale como custo do produto
+  const v = perdaLancada != null ? { ...sv, custoConta: perdaLancada, custoNota: "lançado na devolução" } : sv;
   // Venda normal, como o quadro do ML: preço − tarifa − envios − reembolso.
   // Venda desfeita (v1.10.1), como o "Recebimento devolvido" do ML: o preço volta ao comprador e o frete de ida é
   // cancelado ("Cancelamento de tarifa do Mercado Envios"). A tarifa de venda o ML também tem de devolver (v1.10.2):
   // ela fica na conta até o estorno aparecer no faturamento (entra como crédito), e a Central avisa enquanto falta.
   const totalMl = !temBase ? null : v.desfeita ? -(c.tarifa_centavos ?? 0) - (etiqueta ?? 0) : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios - (c.reembolso_centavos ?? 0);
-  const resultado = totalMl == null ? null : totalMl + creditos - (v.custoConta ?? 0);
+  const resultado = totalMl == null ? null : totalMl + creditos - (v.custoConta ?? 0) - outrosDevolucao;
   return {
     vendaDesfeita: v.desfeita, motivoDesfeita: v.motivo,
     ...estornoDaTarifa(v.desfeita, c.tarifa_centavos, estornoTarifa),
     custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
     freteIda: reais(c.frete_ida_centavos),
-    etiqueta: reais(etiqueta), etiquetaOrigem: etiquetaConfirmada != null ? "faturamento" : c.etiqueta_prevista_centavos != null ? "mediador" : null,
+    etiqueta: reais(etiqueta), etiquetaOrigem,
+    outrosCreditos: reais(outrosCreditos), recuperadoDevolucao: reais(dev?.recuperado_centavos ?? null),
+    outrosDevolucao: reais(dev?.outros_centavos ?? null), perdaDevolucao: reais(perdaLancada),
     envios: reais(envios),
     reembolso: reais(c.reembolso_centavos),
     creditos: reais(creditos),
