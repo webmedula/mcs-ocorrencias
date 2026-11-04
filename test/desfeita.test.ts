@@ -90,3 +90,21 @@ describe("custos da devolução entram na conta da venda", () => {
     expect(c.resultado).toBe(Math.round((-11.5 - 24.9 + 10 - 15 - 2) * 100) / 100);
   });
 });
+
+describe("cancelamento da tarifa pelo ML (MCS-20261026-7HCSAD, depois do estorno)", () => {
+  it("lançamento de bonificação/cancelamento de tarifa vira crédito e zera a conta, sem contar o frete duas vezes", async () => {
+    const { gravarLancamentos } = await import("../src/conta.js");
+    const id = caso({ preco_centavos: 4056, tarifa_centavos: 466, frete_ida_centavos: 745, reembolso_centavos: 4056, pagamento_status: "refunded" }, { status: "encerrada" });
+    const pedido = (db.prepare("SELECT pedido FROM ocorrencias WHERE id = ?").get(id) as { pedido: string }).pedido;
+    const item = (detail: number, tipo: string, descricao: string, valor: number) => ({
+      charge_info: { detail_id: detail, transaction_detail: descricao, detail_amount: valor, detail_type: tipo, creation_date_time: "2026-11-04T10:00:00" },
+      sales_info: [{ order_id: Number(pedido) }], shipping_info: {}, marketplace_info: { marketplace: "ML" },
+    });
+    gravarLancamentos([
+      item(9100 + id, "BONUS", "Cancelamento de tarifa de venda", 4.66),
+      item(9200 + id, "CHARGE", "Cancelamento de tarifa do Mercado Envios", 7.45),
+    ], "2026-11");
+    const c = contaDa(id);
+    expect(c).toMatchObject({ tarifaSituacao: "devolvida", tarifaPendente: 0, totalMl: -4.66, resultado: 0 });
+  });
+});
