@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.10.0
+# API do Gerente IA — Central de Ocorrências v1.10.1
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -25,7 +25,7 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Listar devoluções do ML (v1.8.0) | `GET /devolucoes?status=&q=&pagina=` (status: `aguardando_liberacao`, `liberada`, `em_transito`, `nao_entregue`, `recebida`, `conferida`, `em_contestacao`, `encerrada`, `cancelada`) | sim |
 | Ler a devolução de uma ocorrência | `GET /ocorrencias/{protocolo}/devolucao` (também vem no campo `devolucao` do detalhe) | sim |
 | Conferir, lançar custos, atualizar, contestar | `PATCH /ocorrencias/{protocolo}/devolucao`, `POST …/devolucao/atualizar`, `POST …/devolucao/contestar` | **não** |
-| Conta da venda do ML (v1.9.0) | vem no campo `conta` do detalhe: `preco`, `tarifa`, `freteIda`, `etiqueta`, `reembolso`, `creditos`, `custoProduto`, `custoOrigem` (`tiny` ou `manual`, v1.10.0), `custoTiny`, `custoTinyItens`, `totalMl`, `resultado`, `pendencia`, `reputacaoAfetada`, `lancamentos` | sim (leitura) |
+| Conta da venda do ML (v1.9.0) | vem no campo `conta` do detalhe: `preco`, `tarifa`, `freteIda`, `etiqueta`, `reembolso`, `creditos`, `custoProduto`, `custoOrigem` (`tiny` ou `manual`, v1.10.0), `custoTiny`, `custoTinyItens`, `vendaDesfeita`, `custoConta` (o custo que entra no resultado, v1.10.1), `totalMl`, `resultado`, `pendencia`, `reputacaoAfetada`, `lancamentos` | sim (leitura) |
 | Filtrar por pendência com o ML | `GET /ocorrencias?pendencia=aguardando\|creditou\|negou\|alguma` | sim |
 | Editar a conta (custo do produto, pendência, reputação) | `PATCH /ocorrencias/{protocolo}/conta` | **não** |
 | Ler modelos de resposta | `GET /modelos?protocolo={protocolo}` (traz `texto_pronto` já com nome, protocolo e pedido) | sim |

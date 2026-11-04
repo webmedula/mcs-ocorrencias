@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.0 — painel interno
+// Central de Ocorrências v1.10.1 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -524,7 +524,8 @@
     const c = d.custos;
     const campo = (id, rot, v, dica) => [h("label", { for: id }, rot, dica ? h("span", { class: "dica" }, " " + dica) : null), h("input", { type: "text", id, inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(v) })];
     const [lFrete, iFrete] = campo("dv-frete", "Frete da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
-    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda);
+    const custoTiny = o.conta && o.conta.custoTiny != null ? o.conta.custoTiny : null;
+    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda, custoTiny != null ? `(custo no Tiny: ${reaisTxt(custoTiny)})` : "");
     const [lOutros, iOutros] = campo("dv-outros", "Outros custos (R$)", c.outros);
     const [lReemb, iReemb] = campo("dv-reemb", "Valor reembolsado ao comprador (R$)", c.reembolso, c.reembolsoOrigem === "estimado" ? "(estimado pelo valor dos produtos; informativo, não entra no custo)" : "(informativo, não entra no custo)");
     const [lRec, iRec] = campo("dv-rec", "Recuperado com o Mercado Livre (R$)", c.recuperado, "(desconta do custo)");
@@ -611,16 +612,22 @@
     if (!c) return o.origem === "ml" ? h("p", { class: "aviso" }, "Conta da venda ainda não consultada no Mercado Livre. Ela é montada sozinha na próxima sincronização.") : null;
     const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
     const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
+    // Venda desfeita (v1.10.1): preço, tarifa e reembolso aparecem só como informação, sem entrar na conta
+    const fora = (v) => (v == null ? null : { info: v });
+    const desf = c.vendaDesfeita;
+    const custoLinha = c.custoProduto == null ? null : c.custoConta == null ? fora(c.custoProduto) : -c.custoConta;
     const linhas = [
-      ["Preço do produto", c.preco, ""],
-      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, ""],
-      ["Frete de ida (pago pela MCS)", c.freteIda == null ? null : -c.freteIda, ""],
+      ["Preço do produto", desf ? fora(c.preco) : c.preco, desf ? " (devolvido ao comprador, não entra)" : ""],
+      ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, desf ? " (o ML não devolve)" : ""],
+      ["Frete de ida (pago pela MCS)", desf ? fora(c.freteIda) : c.freteIda == null ? null : -c.freteIda, desf ? " (cancelado pelo ML, não entra)" : ""],
       ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
-      ["Reembolso ao comprador", c.reembolso == null ? null : -c.reembolso, ""],
+      ["Reembolso ao comprador", desf ? fora(c.reembolso || null) : c.reembolso == null ? null : -c.reembolso, desf ? " (não entra)" : ""],
       ["Créditos do ML", c.creditos ? c.creditos : null, " (estornos e coberturas no faturamento)"],
-      ["Custo do produto", c.custoProduto == null ? null : -c.custoProduto, c.custoOrigem === "tiny" ? " (custo do cadastro no Tiny)" : " (digitado pela equipe)"],
+      ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
     ].filter((x) => x[1] != null);
-    const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null), h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
+    const dl = h("dl", { class: "conta-dl" }, linhas.map(([k, v, nota]) => [h("dt", {}, k, nota ? h("small", {}, nota) : null),
+      typeof v === "object" ? h("dd", { class: "fora" }, reaisTxt(v.info)) : h("dd", { class: v < 0 ? "neg" : "pos" }, sinal(v))]));
+    const faixaDesfeita = desf ? h("div", { class: "faixa aviso-f" }, `Venda desfeita: ${c.motivoDesfeita}. Como no "Recebimento devolvido" do ML, o preço e o frete de ida são cancelados; fica a tarifa de venda, a etiqueta de devolução e o produto, se ele não voltar bem.`) : null;
     const total = h("div", { class: "conta-total" },
       h("div", {}, h("span", {}, "Total no Mercado Livre"), h("b", { class: (c.totalMl ?? 0) < 0 ? "neg" : "pos" }, sinal(c.totalMl))),
       h("div", {}, h("span", {}, "Resultado para a MCS"), h("b", { class: (c.resultado ?? 0) < 0 ? "neg" : "pos" }, sinal(c.resultado))));
@@ -653,8 +660,8 @@
       h("p", { class: "aviso" }, c.custoTinyEm ? `Custo lido do Tiny em ${fmt(c.custoTinyEm)}. ` : "Custo ainda não buscado no Tiny. ", btTiny, msgTiny));
 
     // Edição: custo do produto, pendência, reputação
-    const custoInicial = c.custoOrigem === "manual" ? emReais(c.custoProduto) : "";
-    const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: c.custoTiny != null ? `${emReais(c.custoTiny)} (Tiny)` : "0,00", autocomplete: "off", value: custoInicial });
+    const custoInicial = emReais(c.custoProduto);
+    const custo = h("input", { type: "text", id: "ct-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: custoInicial });
     const etiq = h("input", { type: "text", id: "ct-etiq", inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: c.etiquetaOrigem === "faturamento" ? "" : emReais(c.etiqueta), disabled: c.etiquetaOrigem === "faturamento" });
     const pend = h("select", { id: "ct-pend" }, Object.entries(PENDENCIA).map(([k, v]) => h("option", { value: k, selected: k === c.pendencia }, v)));
     const obs = h("input", { type: "text", id: "ct-obs", maxlength: "500", placeholder: "Ex.: pedi cobertura em 31/10", value: c.pendenciaObs || "" });
@@ -663,7 +670,7 @@
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
     const f = h("form", { class: "acao", novalidate: true },
       h("div", { class: "campos-desfecho" },
-        h("div", {}, h("label", { for: "ct-custo" }, "Custo do produto (R$)", h("small", {}, " vazio = usa o do Tiny")), custo),
+        h("div", {}, h("label", { for: "ct-custo" }, "Custo do produto (R$)", h("small", {}, c.custoOrigem === "tiny" ? " (do Tiny)" : c.custoOrigem === "manual" ? (c.custoTiny != null ? " (digitado; apague para voltar ao Tiny)" : " (digitado)") : "")), custo),
         h("div", {}, h("label", { for: "ct-etiq" }, "Etiqueta de devolução prevista (R$)"), etiq)),
       h("label", { for: "ct-pend" }, "Pendência com o Mercado Livre"), pend,
       h("label", { for: "ct-obs" }, "Observação da pendência"), obs,
@@ -684,7 +691,7 @@
           h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
-    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), dl, total,
+    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, dl, total,
       dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 
