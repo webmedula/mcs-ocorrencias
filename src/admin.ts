@@ -778,15 +778,9 @@ admin.get("/estatisticas", (req, res) => {
     contaMl: {
       casos: um(`SELECT COUNT(*) n FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)`, desde).n,
       ...contaTotais(desde),
-      porMes: rows(
-        `SELECT strftime('%Y-%m', o.criado_em) k, COUNT(*) n, ${EXPR_CUSTO} custo FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id
-         WHERE o.criado_em >= datetime('now','-365 days') GROUP BY k ORDER BY k`),
-      porProduto: rows(
-        `SELECT COALESCE(json_extract(o.produto_json, '$[0].titulo'), 'Sem produto') k, COUNT(*) n, ${EXPR_CUSTO} custo
-         FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?) GROUP BY k ORDER BY custo DESC LIMIT 10`, desde),
-      porMotivo: rows(
-        `SELECT o.tipo k, COUNT(*) n, ${EXPR_CUSTO} custo FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id
-         WHERE o.criado_em >= datetime('now', ?) GROUP BY k ORDER BY custo DESC`, desde),
+      porMes: contaAgrupada("-365 days", (o) => String(o.criado_em).slice(0, 7)).sort((x, y) => x.k.localeCompare(y.k)),
+      porProduto: contaAgrupada(desde, (o) => tituloProduto(o.produto_json)).sort((x, y) => y.custo - x.custo).slice(0, 10),
+      porMotivo: contaAgrupada(desde, (o) => o.tipo).sort((x, y) => y.custo - x.custo),
       pendencias: rows("SELECT pendencia_ml k, COUNT(*) n FROM conta_venda GROUP BY k"),
       reputacao: um("SELECT SUM(reputacao_afetada = 1) n FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)", desde).n ?? 0,
     },
@@ -794,23 +788,38 @@ admin.get("/estatisticas", (req, res) => {
   });
 });
 
-// Custo do caso para a MCS, em reais: envios (ida + etiqueta) + reembolso + tarifa − preço... simplificado como o quadro do ML:
-// o que saiu do bolso = tarifa + envios + reembolso − preço (quando negativo, é prejuízo), mais custo do produto, menos créditos.
-const EXPR_CUSTO = `ROUND(SUM(
-  COALESCE(c.tarifa_centavos,0) + COALESCE(c.frete_ida_centavos,0)
-  + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'etiqueta_devolucao'), c.etiqueta_prevista_centavos, 0)
-  + COALESCE(c.reembolso_centavos,0) - COALESCE(c.preco_centavos,0) + COALESCE(c.custo_produto_centavos,0)
-  + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'credito'), 0)
-) / 100.0, 2)`;
+// Totais da conta da venda no período (v1.10.1): somados a partir de contaDa, para seguir a mesma regra do quadro
+// (venda desfeita não conta o preço; custo do produto só quando ele não volta ou volta com problema).
+function tituloProduto(pj: string | null): string {
+  try { const t = pj ? JSON.parse(pj)?.[0]?.titulo : null; return typeof t === "string" && t ? t : "Sem produto"; } catch { return "Sem produto"; }
+}
+/** Custo das reclamações (− resultado da conta) agrupado por uma chave da ocorrência. */
+function contaAgrupada(desde: string, chave: (o: { criado_em: string; produto_json: string | null; tipo: string }) => string) {
+  const linhas = db.prepare(
+    "SELECT o.id, o.criado_em, o.produto_json, o.tipo FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)",
+  ).all(desde) as { id: number; criado_em: string; produto_json: string | null; tipo: string }[];
+  const grupos = new Map<string, { k: string; n: number; custo: number }>();
+  for (const o of linhas) {
+    const k = chave(o);
+    const g = grupos.get(k) ?? { k, n: 0, custo: 0 };
+    g.n++;
+    const r = contaDa(o.id)?.resultado;
+    if (typeof r === "number") g.custo = Math.round((g.custo - r) * 100) / 100;
+    grupos.set(k, g);
+  }
+  return [...grupos.values()];
+}
 function contaTotais(desde: string) {
-  const r = db.prepare(
-    `SELECT ${EXPR_CUSTO} custo, ROUND(SUM(COALESCE(c.preco_centavos,0))/100.0,2) vendas,
-            ROUND(SUM(COALESCE(c.reembolso_centavos,0))/100.0,2) reembolsos,
-            ROUND(SUM(COALESCE(c.frete_ida_centavos,0) + COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'etiqueta_devolucao'), c.etiqueta_prevista_centavos, 0))/100.0,2) envios,
-            ROUND(-SUM(COALESCE((SELECT SUM(f.valor_centavos) FROM ml_faturamento f WHERE f.pedido = o.pedido AND f.categoria = 'credito'), 0))/100.0,2) creditos
-     FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)`,
-  ).get(desde) as any;
-  return { custo: r?.custo ?? 0, vendas: r?.vendas ?? 0, reembolsos: r?.reembolsos ?? 0, envios: r?.envios ?? 0, creditos: r?.creditos ?? 0 };
+  const ids = db.prepare("SELECT c.ocorrencia_id id FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)").all(desde) as { id: number }[];
+  let custo = 0, vendas = 0, reembolsos = 0, envios = 0, creditos = 0;
+  for (const { id } of ids) {
+    const c = contaDa(id);
+    if (!c) continue;
+    if (c.resultado != null) custo -= c.resultado;
+    vendas += c.preco ?? 0; reembolsos += c.reembolso ?? 0; envios += c.envios ?? 0; creditos += c.creditos ?? 0;
+  }
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  return { custo: r2(custo), vendas: r2(vendas), reembolsos: r2(reembolsos), envios: r2(envios), creditos: r2(creditos) };
 }
 
 // ---------- QR code por canal (v1.3.0) ----------

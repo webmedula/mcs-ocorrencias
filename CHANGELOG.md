@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.1 — 2026-11-04
+
+- **Conta da venda em devolução bate com o "Recebimento devolvido" do ML.** Quando a venda é desfeita (há devolução, ou o dinheiro voltou todo ao comprador), o preço do produto não conta mais como ganho e o frete de ida sai da conta, porque o ML cancela os dois. Fica a tarifa de venda, a etiqueta de devolução (quando houver) e o custo do produto, se for o caso. Exemplo: MCS-20261026-7HCSAD passa de −R$ 12,11 para −R$ 4,66, como no ML.
+- **Custo do produto só entra no resultado quando é prejuízo de verdade**: o comprador ficou com o produto, a devolução não chegou ou o produto voltou com problema na conferência. Se voltou em bom estado, ou ainda está voltando, o custo aparece riscado e não entra. Valor digitado pela equipe sempre entra.
+- O campo "Custo do produto" da conta mostra o valor que está valendo (inclusive o do Tiny), e o campo "Produto perdido ou danificado" da devolução mostra o custo do Tiny como referência.
+- Os números da aba Números (custo por mês, produto e motivo) seguem a mesma regra.
+
 ## v1.10.0 — 2026-11-03
 
 - **Custo do produto pelo Tiny na conta da venda.** Nas ocorrências do Mercado Livre, o custo do produto deixa de depender de digitação: a Central busca o pedido no Tiny, lê o custo do cadastro de cada item e multiplica pela quantidade, como a coluna "Custo produtos" do relatório de custos do e-commerce do Tiny. Kit soma os componentes e variação sem custo usa o do produto pai.

@@ -301,6 +301,33 @@ export function contasPendentes(limite = 20): { id: number; pedido: string }[] {
   ).all(limite) as { id: number; pedido: string }[];
 }
 
+// ---------- Venda desfeita e custo do produto que entra no resultado (v1.10.1) ----------
+const PAGAMENTO_DESFEITO = new Set(["refunded", "charged_back", "cancelled"]);
+const CONFERENCIA_COM_PERDA = new Set(["danificado", "incompleto", "diferente", "sem_produto", "outro"]);
+
+export interface EntradaSituacao {
+  preco: number | null; reembolso: number | null; pagamentoStatus: string | null;
+  devolucao: { status: string; conferencia: string | null } | null;
+  custo: number | null; custoOrigem: string | null;
+}
+
+/** A venda foi desfeita (devolução ou reembolso total)? E o custo do produto entra no resultado?
+ *  O custo só é prejuízo quando o produto não volta, ou volta com problema; o valor digitado pela equipe sempre entra. */
+export function situacaoDaVenda(e: EntradaSituacao): { desfeita: boolean; motivo: string | null; custoConta: number | null; custoNota: string | null } {
+  const dev = e.devolucao && e.devolucao.status !== "cancelada" ? e.devolucao : null;
+  const reembolsoTotal = e.preco != null && e.preco > 0 && (e.reembolso ?? 0) >= e.preco;
+  const motivo = dev ? "Produto em devolução" : PAGAMENTO_DESFEITO.has(String(e.pagamentoStatus)) || reembolsoTotal ? "Dinheiro devolvido ao comprador" : null;
+  const desfeita = motivo != null;
+  if (e.custo == null) return { desfeita, motivo, custoConta: null, custoNota: null };
+  if (e.custoOrigem === "manual") return { desfeita, motivo, custoConta: e.custo, custoNota: "digitado pela equipe" };
+  if (!desfeita) return { desfeita, motivo, custoConta: e.custo, custoNota: "custo do cadastro no Tiny" };
+  if (!dev) return { desfeita, motivo, custoConta: e.custo, custoNota: "o comprador ficou com o produto" };
+  if (dev.status === "nao_entregue") return { desfeita, motivo, custoConta: e.custo, custoNota: "a devolução não chegou" };
+  if (dev.conferencia && CONFERENCIA_COM_PERDA.has(dev.conferencia)) return { desfeita, motivo, custoConta: e.custo, custoNota: "o produto voltou com problema" };
+  if (dev.conferencia === "ok") return { desfeita, motivo, custoConta: null, custoNota: "não entra: o produto voltou em bom estado" };
+  return { desfeita, motivo, custoConta: null, custoNota: "não entra por enquanto: só conta se o produto não voltar ou voltar com problema" };
+}
+
 export function contaDa(ocId: number): any | null {
   const c = db.prepare("SELECT c.*, o.pedido FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE c.ocorrencia_id = ?").get(ocId) as any | undefined;
   if (!c) return null;
@@ -311,10 +338,19 @@ export function contaDa(ocId: number): any | null {
   const creditos = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
   const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
   const temBase = c.preco_centavos != null;
-  // Quadro do ML: preço − tarifa − envios − cancelamentos
-  const totalMl = temBase ? (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios - (c.reembolso_centavos ?? 0) : null;
-  const resultado = totalMl == null ? null : totalMl + creditos - (c.custo_produto_centavos ?? 0);
+  const dev = db.prepare("SELECT status, conferencia FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as { status: string; conferencia: string | null } | undefined;
+  const v = situacaoDaVenda({
+    preco: c.preco_centavos, reembolso: c.reembolso_centavos, pagamentoStatus: c.pagamento_status,
+    devolucao: dev ?? null, custo: c.custo_produto_centavos, custoOrigem: c.custo_produto_centavos == null ? null : c.custo_origem ?? "manual",
+  });
+  // Venda normal, como o quadro do ML: preço − tarifa − envios − reembolso.
+  // Venda desfeita (v1.10.1), como o "Recebimento devolvido" do ML: o preço volta ao comprador e o frete de ida é
+  // cancelado ("Cancelamento de tarifa do Mercado Envios"); fica a tarifa de venda e, se houver, a etiqueta de devolução.
+  const totalMl = !temBase ? null : v.desfeita ? -(c.tarifa_centavos ?? 0) - (etiqueta ?? 0) : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios - (c.reembolso_centavos ?? 0);
+  const resultado = totalMl == null ? null : totalMl + creditos - (v.custoConta ?? 0);
   return {
+    vendaDesfeita: v.desfeita, motivoDesfeita: v.motivo,
+    custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
     freteIda: reais(c.frete_ida_centavos),
     etiqueta: reais(etiqueta), etiquetaOrigem: etiquetaConfirmada != null ? "faturamento" : c.etiqueta_prevista_centavos != null ? "mediador" : null,
