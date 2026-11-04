@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.4 — painel interno
+// Central de Ocorrências v1.10.5 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -614,7 +614,7 @@
     const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "devolucao" ? " (custo do envio da devolução no ML)"
       : c.etiquetaOrigem === "devolucao_manual" ? " (lançada na devolução)" : c.etiquetaOrigem === "mediador" ? " (prevista, pela mensagem do mediador)" : "";
     // v1.10.4: mesma ordem do "Recebimento" do ML (preço, tarifa, envios, cancelamentos, total), só com dados reais
-    const origemTxt = (o2) => (o2 === "pagamento" ? " (estorno no pagamento do ML)" : o2 === "faturamento" ? " (crédito no faturamento do ML)" : "");
+    const origemTxt = (o2) => (o2 === "pagamento" ? " (pelo pagamento: o ML só tirou o líquido recebido)" : o2 === "faturamento" ? " (crédito no faturamento do ML)" : "");
     const custoLinha = c.custoProduto == null ? null : c.custoConta == null ? { info: c.custoProduto } : -c.custoConta;
     const grupo = (titulo, itens) => {
       const vis = itens.filter((x) => x[1] != null);
@@ -632,6 +632,7 @@
         ["Cancelamento do produto", c.cancelProduto ? -c.cancelProduto : null, " (devolvido ao comprador)"],
         ["Cancelamento da tarifa de venda", c.tarifaCancelada, origemTxt(c.tarifaCanceladaOrigem)],
         ["Cancelamento da tarifa de envio", c.envioCancelado, origemTxt(c.envioCanceladoOrigem)],
+        ["Tarifas canceladas pelo ML", c.tarifasCanceladas, " (reembolso menos o líquido que a MCS recebeu)"],
       ]),
       grupo("MCS", [
         ["Outros créditos do ML", c.outrosCreditos ? c.outrosCreditos : null, c.recuperadoDevolucao && c.recuperadoDevolucao >= c.outrosCreditos ? " (recuperado, lançado na devolução)" : " (coberturas e bonificações no faturamento)"],

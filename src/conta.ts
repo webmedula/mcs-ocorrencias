@@ -81,23 +81,6 @@ export function aplicarPagamento(r: ResumoPedido, pagamento: any): ResumoPedido 
   return out;
 }
 
-/** Estornos que o ML fez ao vendedor, lidos do pagamento v1 (charges_details): tarifa de venda e envio, em centavos.
- *  Cada cobrança traz amounts.original e amounts.refunded; só contam as pagas pelo vendedor (accounts.from = collector). */
-export function estornosDoPagamento(pagamento: any): { tarifa: number | null; envio: number | null } {
-  const cd: any[] = Array.isArray(pagamento?.charges_details) ? pagamento.charges_details : [];
-  let tarifa: number | null = null, envio: number | null = null;
-  for (const ch of cd) {
-    const ref = ch?.amounts?.refunded;
-    if (typeof ref !== "number") continue;
-    const de = String(ch?.accounts?.from ?? "collector").toLowerCase();
-    if (de && de !== "collector") continue;
-    const nome = `${ch?.name ?? ""} ${ch?.type ?? ""}`.toLowerCase();
-    if (/ship|envio|frete/.test(nome)) envio = (envio ?? 0) + Math.round(ref * 100);
-    else if (/fee|tarifa|comis/.test(nome)) tarifa = (tarifa ?? 0) + Math.round(ref * 100);
-  }
-  return { tarifa, envio };
-}
-
 /** Quanto o vendedor paga de um envio (ida ou volta), em centavos. */
 export function custoDoVendedor(custos: any, vendedor: string): number | null {
   if (!custos || typeof custos !== "object") return null;
@@ -307,12 +290,6 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
       try { r = aplicarPagamento(r, await ml(`/collections/${encodeURIComponent(r.pagamentoIds[0])}`)); }
       catch (e: any) { console.error(`[conta] pagamento ${r.pagamentoIds[0]}: ${e?.message}`); }
     }
-    // Estornos de tarifa e envio (v1.10.4): pagamento v1, quando houve reembolso ou cancelamento
-    let est: { tarifa: number | null; envio: number | null } = { tarifa: null, envio: null };
-    if (r.pagamentoIds.length && ((r.reembolso ?? 0) > 0 || r.pedidoStatus === "cancelled" || /refund|cancel|charged_back/.test(String(r.pagamentoStatus)))) {
-      try { est = estornosDoPagamento(await ml(`/v1/payments/${encodeURIComponent(r.pagamentoIds[0])}`)); }
-      catch (e: any) { console.error(`[conta] pagamento v1 ${r.pagamentoIds[0]}: ${e?.message}`); }
-    }
     const atual = db.prepare("SELECT * FROM conta_venda WHERE ocorrencia_id = ?").get(ocId) as any | undefined;
     // Frete de ida: consulta uma vez (não muda depois de entregue)
     let freteIda: number | null = atual?.frete_ida_centavos ?? null;
@@ -341,7 +318,7 @@ export async function atualizarContaVenda(ocId: number, pedidoMl: any, vendedor:
          estorno_envio_pag_centavos = COALESCE(excluded.estorno_envio_pag_centavos, conta_venda.estorno_envio_pag_centavos),
          ml_atualizado_em = datetime('now')`,
     ).run(ocId, r.preco, r.tarifa, freteIda, med.etiquetaPrevista, r.reembolso, r.liquido, r.pagamentoStatus,
-      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem, r.pedidoStatus, r.canceladoEm, est.tarifa, est.envio);
+      r.liberado == null ? null : r.liberado ? 1 : 0, r.liberacaoEm, reputacao, reputacaoOrigem, r.pedidoStatus, r.canceladoEm, null, null);
   } catch (e: any) {
     console.error(`[conta] ocorrência ${ocId}: ${e?.message}`);
   }
@@ -402,20 +379,29 @@ export function contaDa(ocId: number): any | null {
   const freteDevolucao = dev && dev.status !== "cancelada" ? dev.frete_centavos ?? null : null;
   const etiqueta = etiquetaConfirmada ?? freteDevolucao ?? c.etiqueta_prevista_centavos ?? null;
   const etiquetaOrigem = etiquetaConfirmada != null ? "faturamento" : freteDevolucao != null ? (dev?.frete_origem === "manual" ? "devolucao_manual" : "devolucao") : c.etiqueta_prevista_centavos != null ? "mediador" : null;
-  // v1.10.4: a conta segue o "Recebimento" do ML linha a linha, só com dados reais (sem regra sobre o que o ML devolve):
+  // A conta segue o "Recebimento" do ML linha a linha, só com dados reais (sem regra sobre o que o ML devolve):
   // preço − tarifa de venda − envios + cancelamentos. Cancelamentos = produto devolvido ao comprador (reembolso) +
-  // tarifa de venda cancelada + tarifa de envio cancelada, lidos do pagamento (charges_details) ou do faturamento.
+  // tarifas canceladas (de venda e de envio).
   const creditoDe = (f: (l: any) => boolean) => -lanc.filter((l) => l.categoria === "credito" && f(l)).reduce((t, l) => t + l.valor_centavos, 0);
   const ehCancelEnvio = (l: any) => /envio|frete|shipping/i.test(l.descricao) && !/devolu/i.test(l.descricao) && /^\s*(cancelamento|estorno|anula|devolu)/i.test(l.descricao);
   const tarifaFat = creditoDe((l) => ehTarifaDeVenda(l.descricao, l.tipo, l.subtipo));
   const envioFat = creditoDe(ehCancelEnvio);
-  const tarifaCancelada = Math.max(tarifaFat, c.estorno_tarifa_pag_centavos ?? 0);
-  const envioCancelado = Math.max(envioFat, c.estorno_envio_pag_centavos ?? 0);
-  const origemCancel = (fat: number, pag: number | null) => (fat <= 0 && !pag ? null : (pag ?? 0) > fat ? "pagamento" : "faturamento");
+  // v1.10.5: no reembolso total, o ML só tira da MCS o líquido que ela recebeu (net_received_amount do pagamento).
+  // A diferença entre o reembolso e o líquido são as tarifas que o ML cancelou (é o que o "Recebimento" mostra).
+  const reembolsoTotal = c.pagamento_status === "refunded" && c.preco_centavos > 0 && (c.reembolso_centavos ?? 0) >= c.preco_centavos;
+  const tarifasPeloPagamento = reembolsoTotal && c.liquido_centavos != null ? Math.max(0, (c.reembolso_centavos ?? 0) - c.liquido_centavos) : 0;
+  const somaFat = tarifaFat + envioFat;
+  const pagMaior = tarifasPeloPagamento > somaFat;
+  // Quando o pagamento explica mais que o faturamento: se bate exatamente com tarifa + envio, mostra separado; senão, numa linha só
+  const bateTarifaEnvio = pagMaior && tarifasPeloPagamento === (c.tarifa_centavos ?? 0) + (c.frete_ida_centavos ?? 0);
+  const tarifaCancelada = pagMaior ? (bateTarifaEnvio ? c.tarifa_centavos ?? 0 : 0) : tarifaFat;
+  const envioCancelado = pagMaior ? (bateTarifaEnvio ? c.frete_ida_centavos ?? 0 : 0) : envioFat;
+  const tarifasCanceladas = pagMaior && !bateTarifaEnvio ? tarifasPeloPagamento : 0;
+  const origemTarifas = pagMaior ? "pagamento" : "faturamento";
   const creditosFat = lanc.some((l) => l.categoria === "credito") ? -soma("credito") : 0; // crédito guardado negativo
   // Outros créditos (coberturas, bonificações): os do faturamento ou o "recuperado com o ML" digitado na devolução (o maior)
   const outrosCreditos = Math.max(creditosFat - tarifaFat - envioFat, dev?.recuperado_centavos ?? 0);
-  const creditos = tarifaCancelada + envioCancelado + outrosCreditos;
+  const creditos = tarifaCancelada + envioCancelado + tarifasCanceladas + outrosCreditos;
   const outrosDevolucao = dev?.outros_centavos ?? 0;
   const envios = (c.frete_ida_centavos ?? 0) + (etiqueta ?? 0);
   const temBase = c.preco_centavos != null;
@@ -426,7 +412,7 @@ export function contaDa(ocId: number): any | null {
   });
   // "Produto perdido ou danificado" lançado na devolução vale como custo do produto
   const v = perdaLancada != null ? { ...sv, custoConta: perdaLancada, custoNota: "lançado na devolução" } : sv;
-  const cancelamentos = -(c.reembolso_centavos ?? 0) + tarifaCancelada + envioCancelado;
+  const cancelamentos = -(c.reembolso_centavos ?? 0) + tarifaCancelada + envioCancelado + tarifasCanceladas;
   const totalMl = !temBase ? null : (c.preco_centavos ?? 0) - (c.tarifa_centavos ?? 0) - envios + cancelamentos;
   const resultado = totalMl == null ? null : totalMl + outrosCreditos - (v.custoConta ?? 0) - outrosDevolucao;
   return {
@@ -434,8 +420,9 @@ export function contaDa(ocId: number): any | null {
     pedidoCancelado: c.pedido_status === "cancelled", canceladoEm: c.cancelado_em ?? null,
     cancelamentos: temBase ? reais(cancelamentos) : null,
     cancelProduto: c.reembolso_centavos ? reais(c.reembolso_centavos) : null,
-    tarifaCancelada: tarifaCancelada ? reais(tarifaCancelada) : null, tarifaCanceladaOrigem: origemCancel(tarifaFat, c.estorno_tarifa_pag_centavos),
-    envioCancelado: envioCancelado ? reais(envioCancelado) : null, envioCanceladoOrigem: origemCancel(envioFat, c.estorno_envio_pag_centavos),
+    tarifaCancelada: tarifaCancelada ? reais(tarifaCancelada) : null, envioCancelado: envioCancelado ? reais(envioCancelado) : null,
+    tarifasCanceladas: tarifasCanceladas ? reais(tarifasCanceladas) : null,
+    tarifaCanceladaOrigem: tarifaCancelada ? origemTarifas : null, envioCanceladoOrigem: envioCancelado ? origemTarifas : null,
     custoConta: reais(v.custoConta), custoNota: v.custoNota,
     preco: reais(c.preco_centavos), tarifa: reais(c.tarifa_centavos),
     freteIda: reais(c.frete_ida_centavos),
