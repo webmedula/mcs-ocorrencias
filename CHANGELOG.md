@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.10.4 — 2026-11-04
+
+- **Conta da venda igual ao "Recebimento" do Mercado Livre, só com dados reais.** Sai qualquer regra sobre o que o ML devolve ou não: a conta mostra, na mesma ordem do ML, preço do produto, tarifa de venda, envios e **Cancelamentos** (produto devolvido ao comprador, cancelamento da tarifa de venda e cancelamento da tarifa de envio), e o Total no ML. Cada cancelamento só aparece quando o ML informa: pelo pagamento (API v1, `charges_details` com o valor estornado de cada cobrança) ou pelo faturamento.
+- Embaixo, a parte da MCS: outros créditos (coberturas), outros custos da devolução e custo do produto, até o Resultado para a MCS.
+- Mostra quando o ML cancelou a venda. O arquivo de dados brutos do ML passa a trazer também o pagamento v1.
+- CSV: a coluna de tarifa pendente vira "Cancelamentos ML (R$)".
+
 ## v1.10.3 — 2026-11-04
 
 - Correção: o estorno da tarifa de venda não era reconhecido quando o ML lança o cancelamento como bonificação (`BONUS`) ou com descrição "Cancelamento de tarifa…". Esses lançamentos agora entram como crédito, e o cancelamento do frete de ida não é contado duas vezes na venda desfeita. Caso MCS-20261026-7HCSAD: a conta passa a dar R$ 0,00, como no ML.

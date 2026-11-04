@@ -191,6 +191,8 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .faixa.conta .conta-dl dt small { display: block; color: var(--suave); font-size: .75rem; }
 .faixa.conta .conta-dl dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .faixa.conta .conta-dl dd.fora { color: var(--suave); text-decoration: line-through; }
+.faixa.conta .conta-dl dt.grupo { font-weight: 600; margin-top: 6px; }
+.faixa.conta .conta-dl dt.sub { padding-left: 12px; }
 .faixa.conta .conta-total { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.08); }
 .faixa.conta .conta-total span { display: block; font-size: .78rem; color: var(--suave); }
 .faixa.conta .conta-total b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
