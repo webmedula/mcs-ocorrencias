@@ -18,7 +18,7 @@ import QRCode from "qrcode";
 import { registrar, checarFalhas, checarLoginNovo } from "./registro.js";
 import { anonimizar, excluir, exportarDados } from "./lgpd.js";
 import { fazerBackup, listarBackups, pastaBackups } from "./rotinas.js";
-import { MlErro, atualizarOcorrenciaMl, desconectar, enviarMensagem, financeiroBruto, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
+import { MlErro, atualizarContaAgora, atualizarOcorrenciaMl, desconectar, enviarMensagem, financeiroBruto, sincronizar, statusConexao, urlAutorizacao } from "./ml.js";
 import multer from "multer";
 import {
   MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
@@ -555,6 +555,19 @@ admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.origem !== "ml") return res.status(400).json({ erro: "A conta da venda só existe para ocorrências do Mercado Livre." });
   res.json(editarConta(o.id, p.data, nomeDoAtor(req.ator!)));
+});
+
+// Conta da venda: lê de novo o pedido no ML agora (v1.10.6)
+admin.post("/ocorrencias/:protocolo/conta/atualizar", soPessoas, async (req, res) => {
+  const o = oc(req.params.protocolo);
+  if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  if (!o.pedido) return res.status(400).json({ erro: "Esta ocorrência não tem número de pedido do Mercado Livre." });
+  try {
+    await atualizarContaAgora(o);
+    res.json(contaDa(o.id));
+  } catch (e) {
+    return erroMl(res, e);
+  }
 });
 
 // Custo do produto pelo Tiny (v1.10.0): busca de novo agora (botão na conta da venda)

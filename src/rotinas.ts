@@ -159,17 +159,15 @@ async function ciclo(): Promise<void> {
   if (rodando) return;
   rodando = true;
   try {
-    await alertarPrazos();
-    await resumoSeChegouAHora();
-    await backupSeFaltar();
-    await enviarPesquisasPendentes();
-    await completarPendentesTiny();
-    await completarContas();
-    await completarCustosTiny();
-    await faturamentoSeFaltar();
-    aplicarRetencao();
-  } catch (e: any) {
-    console.error("[rotinas]", e?.message);
+    // v1.10.6: cada etapa isolada; a falha de uma não impede as seguintes (ex.: a conta da venda)
+    const etapas: [string, () => unknown][] = [
+      ["prazos", alertarPrazos], ["resumo", resumoSeChegouAHora], ["backup", backupSeFaltar],
+      ["pesquisas", enviarPesquisasPendentes], ["tiny", completarPendentesTiny], ["contas", () => completarContas()],
+      ["custos tiny", () => completarCustosTiny()], ["faturamento", faturamentoSeFaltar], ["retenção", aplicarRetencao],
+    ];
+    for (const [nome, f] of etapas) {
+      try { await f(); } catch (e: any) { console.error(`[rotinas] ${nome}:`, e?.message); }
+    }
   } finally {
     rodando = false;
   }

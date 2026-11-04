@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.5 — painel interno
+// Central de Ocorrências v1.10.6 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -626,6 +626,7 @@
         ["Preço do produto", c.preco, ""],
         ["Tarifa de venda", c.tarifa == null ? null : -c.tarifa, ""],
         ["Envio (frete de ida)", c.freteIda == null ? null : -c.freteIda, ""],
+        ...(c.freteCobrado ? [["Envio cobrado à parte (faturamento)", -c.freteCobrado, ""]] : []),
         ["Etiqueta de devolução", c.etiqueta == null ? null : -c.etiqueta, etiquetaNota],
       ]),
       grupo(`Cancelamentos${c.cancelamentos != null ? " " + sinal(c.cancelamentos) : ""}`, [
@@ -640,6 +641,17 @@
         ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
       ]));
     const faixaDesfeita = c.pedidoCancelado ? h("div", { class: "faixa aviso-f" }, `Venda cancelada pelo Mercado Livre${c.canceladoEm ? ` em ${fmt(c.canceladoEm)}` : ""}.`) : null;
+    // v1.10.6: erro ao ler o ML e botão para ler de novo agora
+    const msgAt = h("span", { class: "oculto", role: "status" });
+    const btAt = h("button", { type: "button", class: "sec mini" }, "Atualizar do Mercado Livre");
+    btAt.addEventListener("click", async () => {
+      btAt.disabled = true;
+      const r = await api("POST", `/ocorrencias/${encodeURIComponent(o.protocolo)}/conta/atualizar`);
+      btAt.disabled = false;
+      if (r.ok) await recarregar(); else { msgAt.textContent = " " + (r.json.erro || "Não foi possível ler o Mercado Livre."); mostrar(msgAt, true); }
+    });
+    const faixaErro = c.erroMl ? h("div", { class: "faixa aviso-f" }, c.erroMl) : null;
+    const semDados = c.preco == null && !c.erroMl ? h("p", { class: "aviso" }, "Os valores do Mercado Livre ainda não foram lidos para esta venda.") : null;
     const total = h("div", { class: "conta-total" },
       h("div", {}, h("span", {}, "Total no Mercado Livre"), h("b", { class: (c.totalMl ?? 0) < 0 ? "neg" : "pos" }, sinal(c.totalMl))),
       h("div", {}, h("span", {}, "Resultado para a MCS"), h("b", { class: (c.resultado ?? 0) < 0 ? "neg" : "pos" }, sinal(c.resultado))));
@@ -701,10 +713,10 @@
     });
     const lanc = c.lancamentos && c.lancamentos.length
       ? h("details", { class: "lanc" }, h("summary", {}, `Lançamentos do faturamento do ML (${c.lancamentos.length})`),
-          h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
+          h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao}${l.debitado === true ? " (descontado do pagamento)" : l.debitado === false ? " (cobrado à parte)" : ""} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
-    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaDesfeita, dl, total,
+    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaErro, semDados, faixaDesfeita, dl, total, h("p", { class: "aviso" }, btAt, msgAt),
       dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 
