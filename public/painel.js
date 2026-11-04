@@ -839,7 +839,6 @@
     for (const [rot, val, cls] of [["Reclamações do ML com conta", cm.casos ?? 0, "em_analise"], ["Custo para a MCS", moeda(cm.custo) || "R$ 0,00", "nova"],
       ["Vendido nesses pedidos", moeda(cm.vendas) || "R$ 0,00", "resolvida"], ["Reembolsado aos compradores", moeda(cm.reembolsos) || "R$ 0,00", "nova"],
       ["Envios (ida + etiqueta)", moeda(cm.envios) || "R$ 0,00", "aguardando_cliente"], ["Créditos do ML", moeda(cm.creditos) || "R$ 0,00", "resolvida"],
-      ["Tarifas que o ML ainda não devolveu", `${moeda(cm.tarifasPendentes) || "R$ 0,00"} (${cm.casosTarifaPendente ?? 0})`, "nova"],
       ["Reputação afetada", cm.reputacao ?? 0, "nova"], ["Aguardando retorno do ML", (cm.pendencias || []).find((x) => x.k === "aguardando")?.n ?? 0, "aguardando_cliente"]])
       nc.append(h("div", { class: "kpi " + cls }, rot, h("b", {}, String(val))));
     barras($("#g-conta-mes"), (cm.porMes || []).map((x) => ({ rotulo: `${x.k.slice(5, 7)}/${x.k.slice(0, 4)} (${x.n})`, n: Math.max(0, Math.round((x.custo || 0) * 100) / 100) })));

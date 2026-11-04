@@ -3,7 +3,7 @@
 ## v1.10.2 — 2026-11-04
 
 - **Tarifa de venda na devolução: a Central confere se o ML devolveu.** Na venda desfeita, o ML tem de devolver a tarifa de venda. A Central procura o estorno no faturamento do ML (crédito de tarifa de venda/comissão do pedido) e mostra a situação: devolvida, devolvida em parte ou ainda não devolvida, com o valor que falta. Enquanto falta, a tarifa continua como perda no resultado e aparece um aviso no quadro; quando o estorno chega, a conta se ajusta sozinha.
-- Aba Números: novo indicador **Tarifas que o ML ainda não devolveu** (valor e quantidade de casos). CSV: coluna "Tarifa não devolvida pelo ML (R$)".
+- CSV: coluna "Tarifa não devolvida pelo ML (R$)".
 
 ## v1.10.1 — 2026-11-04
 

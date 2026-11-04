@@ -811,16 +811,15 @@ function contaAgrupada(desde: string, chave: (o: { criado_em: string; produto_js
 }
 function contaTotais(desde: string) {
   const ids = db.prepare("SELECT c.ocorrencia_id id FROM conta_venda c JOIN ocorrencias o ON o.id = c.ocorrencia_id WHERE o.criado_em >= datetime('now', ?)").all(desde) as { id: number }[];
-  let custo = 0, vendas = 0, reembolsos = 0, envios = 0, creditos = 0, tarifasPendentes = 0, casosTarifaPendente = 0;
+  let custo = 0, vendas = 0, reembolsos = 0, envios = 0, creditos = 0;
   for (const { id } of ids) {
     const c = contaDa(id);
     if (!c) continue;
     if (c.resultado != null) custo -= c.resultado;
     vendas += c.preco ?? 0; reembolsos += c.reembolso ?? 0; envios += c.envios ?? 0; creditos += c.creditos ?? 0;
-    if (c.tarifaPendente) { tarifasPendentes += c.tarifaPendente; casosTarifaPendente++; }
   }
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  return { custo: r2(custo), vendas: r2(vendas), reembolsos: r2(reembolsos), envios: r2(envios), creditos: r2(creditos), tarifasPendentes: r2(tarifasPendentes), casosTarifaPendente };
+  return { custo: r2(custo), vendas: r2(vendas), reembolsos: r2(reembolsos), envios: r2(envios), creditos: r2(creditos) };
 }
 
 // ---------- QR code por canal (v1.3.0) ----------
