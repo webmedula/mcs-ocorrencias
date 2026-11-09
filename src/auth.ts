@@ -140,6 +140,18 @@ export const soGerente = (req: Request, res: Response, next: NextFunction): void
   next();
 };
 
+/**
+ * Leitura do gerente aberta também ao Gerente IA (v1.12.0): pessoa com papel gerente OU a chave de API.
+ * Só para rotas GET que não baixam arquivo nem mudam nada; as ações continuam em `soGerente`.
+ */
+export const soGerenteOuIA = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.ator?.tipo === "ia" || (req.ator?.tipo === "usuario" && req.ator.papel === "gerente")) {
+    next();
+    return;
+  }
+  res.status(403).json({ erro: "Apenas o gerente pode fazer isso." });
+};
+
 /** Nome que fica no histórico ("Maria (atendimento)" / "Gerente IA"). */
 export function nomeDoAtor(a: Ator): string {
   return a.tipo === "ia" ? "Gerente IA" : a.nome;

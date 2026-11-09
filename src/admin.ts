@@ -8,7 +8,7 @@ import { pastaProdutos } from "./produtos.js";
 import { db } from "./db.js";
 import {
   conferirSenha, criarSessao, encerrarSessao, exigirLogin, gastarTempo, gerarChave, hashSenha,
-  identificar, nomeDoAtor, senhaForte, soGerente, soPessoas, type Ator,
+  identificar, nomeDoAtor, senhaForte, soGerente, soGerenteOuIA, soPessoas, type Ator,
 } from "./auth.js";
 import { avisarPessoaEmail, enviarRedefinicao, enviarResposta } from "./notify.js";
 import crypto from "node:crypto";
@@ -535,7 +535,7 @@ admin.post("/ocorrencias/:protocolo/devolucao/contestar", soPessoas, (req, res, 
 });
 
 // Diagnóstico (v1.8.1): dados brutos de dinheiro do pedido no ML, para desenhar a "conta da venda". Só gerente; fica no registro.
-admin.get("/ocorrencias/:protocolo/ml/financeiro-bruto", soGerente, async (req, res) => {
+admin.get("/ocorrencias/:protocolo/ml/financeiro-bruto", soGerenteOuIA, async (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.origem !== "ml" && o.canal !== "mercado_livre") return res.status(400).json({ erro: "Esta ocorrência não é do Mercado Livre." });
@@ -591,14 +591,14 @@ admin.post("/ocorrencias/:protocolo/custo-tiny", soPessoas, async (req, res) => 
   res.json(contaDa(o.id));
 });
 
-admin.get("/ml/faturamento", soGerente, (_req, res) => res.json(statusFaturamento()));
+admin.get("/ml/faturamento", soGerenteOuIA, (_req, res) => res.json(statusFaturamento()));
 // Roda em segundo plano (respeita 5 chamadas/min do ML, pode levar vários minutos); a tela acompanha pelo status
 admin.post("/ml/faturamento/sincronizar", soGerente, (_req, res) => {
   void sincronizarFaturamento().then((r) => console.log(`[faturamento] manual: ${r.lancamentos} lançamento(s) em ${r.paginas} página(s)${r.erro ? ` · erro: ${r.erro}` : ""}`));
   res.status(202).json({ iniciado: true, ...statusFaturamento() });
 });
 
-admin.get("/ml/status", soGerente, (_req, res) => res.json(statusConexao()));
+admin.get("/ml/status", soGerenteOuIA, (_req, res) => res.json(statusConexao()));
 
 admin.post("/ml/conectar", soGerente, (req, res) => {
   try {
@@ -641,7 +641,7 @@ admin.post("/eu/avisos", soPessoas, (req, res) => {
 });
 
 // ---------- Equipe (só gerente) ----------
-admin.get("/usuarios", soGerente, (_req, res) => {
+admin.get("/usuarios", soGerenteOuIA, (_req, res) => {
   res.json(db.prepare("SELECT id, nome, email, papel, ativo, criado_em, ultimo_login FROM usuarios ORDER BY ativo DESC, nome").all());
 });
 
@@ -860,7 +860,7 @@ admin.get("/qr", async (req, res) => {
 });
 
 // ---------- Backup (só gerente) ----------
-admin.get("/backups", soGerente, (_req, res) => res.json(listarBackups()));
+admin.get("/backups", soGerenteOuIA, (_req, res) => res.json(listarBackups()));
 admin.post("/backups", soGerente, async (_req, res) => {
   try { res.status(201).json({ nome: await fazerBackup() }); }
   catch (e: any) { res.status(500).json({ erro: "Não foi possível criar o backup: " + (e?.message ?? "erro") }); }
@@ -918,7 +918,7 @@ admin.post("/ocorrencias/:protocolo/excluir", soGerente, (req, res) => {
 });
 
 // ---------- Registro de atividades (só gerente) ----------
-admin.get("/registro", soGerente, (req, res) => {
+admin.get("/registro", soGerenteOuIA, (req, res) => {
   const so = String(req.query.so ?? "");
   const where = so === "acessos" ? "WHERE r.tipo LIKE 'login%' OR r.tipo LIKE 'alerta%'" : "";
   res.json(

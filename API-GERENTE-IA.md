@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.11.0
+# API do Gerente IA — Central de Ocorrências v1.12.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -35,9 +35,14 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Ver fotos | `GET /anexos/{id}` | **não** |
 | Exportar a lista em CSV | `GET /ocorrencias.csv` | **não** |
 | Números (contagens, tempos) | `GET /estatisticas?dias=7\|30\|90\|365` | sim |
-| Backups | `/backups` | **não** |
-| Registro de atividades | `GET /registro` | **não** |
-| Equipe e chaves | `/usuarios`, `/chaves` | **não** |
+| Conexão e faturamento do ML (v1.12.0) | `GET /ml/status`, `GET /ml/faturamento` | sim (leitura) |
+| Lançamentos brutos do ML de uma ocorrência (v1.12.0) | `GET /ocorrencias/{protocolo}/ml/financeiro-bruto` | sim |
+| Conectar/sincronizar/desconectar o ML | `POST /ml/conectar`, `POST /ml/sincronizar`, `POST /ml/faturamento/sincronizar`, `DELETE /ml` | **não** |
+| Lista de backups (v1.12.0) | `GET /backups` (só nomes, tamanho e data) | sim |
+| Criar ou baixar backup | `POST /backups`, `GET /backups/{nome}`, `GET /backups/fotos.tar.gz` | **não** |
+| Registro de atividades (v1.12.0) | `GET /registro` (`?so=acessos` só logins e alertas; últimas 100 linhas) | sim |
+| Equipe (v1.12.0) | `GET /usuarios` (nome, e-mail, papel, ativo, último login) | sim |
+| Criar/editar pessoas, chaves | `POST/PATCH /usuarios`, `/chaves` | **não** |
 
 Tudo que a chave faz fica no histórico com o autor **Gerente IA**.
 
