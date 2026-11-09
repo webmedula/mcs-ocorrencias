@@ -387,7 +387,7 @@ export async function contestarDevolucao(
 }
 
 // ---------- Lista da aba Devoluções ----------
-export function listarDevolucoes(filtro: { status?: string; q?: string; pagina: number; porPagina: number }) {
+export function listarDevolucoes(filtro: { status?: string; q?: string; pagina: number; porPagina: number; filaDe?: number | null }) {
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (filtro.status && filtro.status in STATUS_DEVOLUCAO) { where.push("d.status = ?"); args.push(filtro.status); }
@@ -396,6 +396,9 @@ export function listarDevolucoes(filtro: { status?: string; q?: string; pagina: 
     const like = `%${q.replace(/[%_\\]/g, (c) => "\\" + c)}%`;
     where.push("(o.protocolo LIKE ? ESCAPE '\\' OR o.pedido LIKE ? ESCAPE '\\' OR o.nome LIKE ? ESCAPE '\\' OR d.rastreio LIKE ? ESCAPE '\\')");
     args.push(like, like, like, like);
+  } else if (filtro.filaDe != null) {
+    // v1.11.0: perfil Atendimento vê só a própria fila (as outras pela busca)
+    where.push("o.responsavel_id = ?"); args.push(filtro.filaDe);
   }
   const cond = where.length ? "WHERE " + where.join(" AND ") : "";
   const total = (db.prepare(`SELECT COUNT(*) n FROM devolucoes d JOIN ocorrencias o ON o.id = d.ocorrencia_id ${cond}`).get(...args) as { n: number }).n;
@@ -416,6 +419,7 @@ export function listarDevolucoes(filtro: { status?: string; q?: string; pagina: 
       custo: tem_custo ? custo_centavos / 100 : null, produto: p ? { foto: p.foto, titulo: p.titulo } : null };
   });
   const contagem: Record<string, number> = Object.fromEntries(Object.keys(STATUS_DEVOLUCAO).map((k) => [k, 0]));
-  for (const r of db.prepare("SELECT status, COUNT(*) n FROM devolucoes GROUP BY status").all() as { status: string; n: number }[]) contagem[r.status] = r.n;
+  const fila = filtro.filaDe != null ? "JOIN ocorrencias o ON o.id = d.ocorrencia_id WHERE o.responsavel_id = ?" : "";
+  for (const r of db.prepare(`SELECT d.status, COUNT(*) n FROM devolucoes d ${fila} GROUP BY d.status`).all(...(filtro.filaDe != null ? [filtro.filaDe] : [])) as { status: string; n: number }[]) contagem[r.status] = r.n;
   return { itens, total, pagina: filtro.pagina, porPagina: filtro.porPagina, contagem, status: STATUS_DEVOLUCAO };
 }

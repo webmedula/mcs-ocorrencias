@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.10.6 — painel interno
+// Central de Ocorrências v1.11.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -63,6 +63,8 @@
     for (const v of ["login", "esqueci", "redefinir"]) mostrar($("#v-" + v), false);
     mostrar($("#menu"), true);
     mostrar($("#aba-equipe"), eu.papel === "gerente");
+    // v1.11.0: perfil Atendimento vê a própria fila e a busca, sem filtros, números e conta da venda
+    document.body.classList.toggle("modo-equipe", eu.papel === "atendimento");
     $("#quem").textContent = `${eu.nome} · ${PAPEL[eu.papel] || ""}`;
     const qml = new URLSearchParams(location.search).get("ml");
     if (qml && eu.papel === "gerente") {
@@ -102,7 +104,7 @@
     for (const o of d.itens) {
       const tr = h("tr", { class: "item-oc" + (o.protocolo === estado.aberto ? " sel" : ""), tabindex: "0", "data-p": o.protocolo, role: "button", "aria-label": `Abrir ${o.protocolo}` },
         h("td", {}, o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
-          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null, o.devolucao ? h("span", { class: "sel-ml dev", title: "Tem devolução" }, "DEV") : null, o.pendencia_ml === "aguardando" ? h("span", { class: "sel-ml pend", title: "Aguardando retorno do Mercado Livre" }, "ML?") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
+          h("strong", {}, o.protocolo, o.origem === "ml" ? h("span", { class: "sel-ml" }, "ML") : null, o.devolucao ? h("span", { class: "sel-ml dev", title: "Tem devolução" }, "DEV") : null, o.pendencia_ml === "aguardando" ? h("span", { class: "sel-ml pend", title: "Aguardando retorno do Mercado Livre" }, "ML?") : null), h("small", {}, `${o.nome} · ${fmt(o.criado_em)}`), o.responsavel ? h("small", { class: "resp-lista" }, "Fila: " + o.responsavel) : null, prazoEl(o), h("small", { class: "so-m" }, `${d.canais[o.canal] || o.canal} · ${d.tipos[o.tipo] || o.tipo}`)),
         h("td", { class: "col-m" }, d.canais[o.canal] || o.canal),
         h("td", { class: "col-m" }, d.tipos[o.tipo] || o.tipo),
         h("td", {}, h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
@@ -112,6 +114,15 @@
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
       corpo.append(tr);
     }
+    const equipe = estado.eu?.papel === "atendimento";
+    const buscando = Boolean(f.q);
+    if (equipe) {
+      $("#lista-titulo").textContent = buscando ? `Resultado da busca por "${f.q}"` : "Minha fila";
+      mostrar($("#lista-ajuda"), !buscando);
+    }
+    $("#vazio").textContent = equipe && !buscando
+      ? "Sua fila está vazia. Busque um caso pelo protocolo, pedido, comprador ou rastreio, ou aguarde o gerente enviar um para você."
+      : "Nenhuma ocorrência encontrada.";
     mostrar($("#vazio"), d.itens.length === 0);
     const paginas = Math.max(1, Math.ceil(d.total / d.porPagina));
     $("#p-info").textContent = `${d.total} ocorrência${d.total === 1 ? "" : "s"} · página ${d.pagina} de ${paginas}`;
@@ -132,7 +143,7 @@
   function montarFiltros(d) {
     for (const [k, v] of Object.entries(d.canais)) $("#f-canal").append(h("option", { value: k }, v));
     for (const k of Object.keys(d.status)) $("#f-status").append(h("option", { value: k }, STATUS_INT[k] || k));
-    for (const u of d.equipe || []) $("#f-responsavel").append(h("option", { value: String(u.id) }, u.nome));
+    for (const u of d.equipe || []) $("#f-responsavel").append(h("option", { value: String(u.id) }, "Fila de " + u.nome));
   }
 
   function renderKpis(contagem) {
@@ -308,7 +319,7 @@
     const atual = o.responsavel;
     const opcoes = [...equipe];
     if (atual && !opcoes.some((u) => u.id === atual.id)) opcoes.push({ id: atual.id, nome: atual.nome + " (desativado)" });
-    const sel = h("select", { id: "d-resp-pessoa" }, h("option", { value: "" }, "Ninguém"),
+    const sel = h("select", { id: "d-resp-pessoa" }, h("option", { value: "" }, "Ninguém (sem fila)"),
       opcoes.map((u) => h("option", { value: String(u.id), selected: atual?.id === u.id }, u.nome)));
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
     async function salvar(usuarioId) {
@@ -319,8 +330,10 @@
     }
     sel.addEventListener("change", () => salvar(sel.value ? Number(sel.value) : null));
     const meuId = estado.eu?.id;
-    const assumir = meuId && atual?.id !== meuId ? h("button", { type: "button", class: "sec mini", onclick: () => salvar(meuId) }, "Assumir") : null;
-    return h("div", { class: "acao" }, h("label", { for: "d-resp-pessoa" }, "Responsável"),
+    const assumir = meuId && atual?.id !== meuId ? h("button", { type: "button", class: "sec mini", onclick: () => salvar(meuId) }, "Pegar para minha fila") : null;
+    // v1.11.0: o gerente envia o caso para a fila de alguém da equipe
+    const rotulo = estado.eu?.papel === "gerente" ? "Enviar para a fila de" : "Na fila de";
+    return h("div", { class: "acao" }, h("label", { for: "d-resp-pessoa" }, rotulo),
       h("div", { class: "linha-resp" }, sel, assumir), msg);
   }
 
@@ -461,7 +474,7 @@
         h("td", {},
           o.produto?.foto ? h("img", { class: "mini-prod", src: "/api/admin/produto-img/" + o.produto.foto, alt: "", width: "44", height: "44", loading: "lazy" }) : null,
           h("strong", {}, o.protocolo, o.tipo ? h("span", { class: "sel-ml dev" }, o.tipo) : null),
-          h("small", {}, `${o.nome} · pedido ${o.pedido}`), o.responsavel ? h("small", { class: "resp-lista" }, "Com " + o.responsavel) : null,
+          h("small", {}, `${o.nome} · pedido ${o.pedido}`), o.responsavel ? h("small", { class: "resp-lista" }, "Fila: " + o.responsavel) : null,
           o.status === "aguardando_liberacao" ? prazoEl({ ...o, origem: "ml" }) : null),
         h("td", { class: "col-m" }, o.rastreio || "—"),
         h("td", {}, h("span", { class: "etiqueta dev-" + o.status }, d.status[o.status] || o.status)),
@@ -471,6 +484,9 @@
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
       corpo.append(tr);
     }
+    $("#dv-vazio").textContent = estado.eu?.papel === "atendimento" && !estado.devFiltro.q
+      ? "Nenhuma devolução na sua fila. Busque pelo protocolo, pedido, comprador ou rastreio para achar outra."
+      : "Nenhuma devolução encontrada.";
     mostrar($("#dv-vazio"), d.itens.length === 0);
     const paginas = Math.max(1, Math.ceil(d.total / d.porPagina));
     $("#dv-info").textContent = `${d.total} devoluç${d.total === 1 ? "ão" : "ões"} · página ${d.pagina} de ${paginas}`;
@@ -609,6 +625,7 @@
 
   function blocoConta(o) {
     const c = o.conta;
+    if (!c && estado.eu?.papel === "atendimento") return null; // v1.11.0: conta da venda só para o gerente
     if (!c) return o.origem === "ml" ? h("p", { class: "aviso" }, "Conta da venda ainda não consultada no Mercado Livre. Ela é montada sozinha na próxima sincronização.") : null;
     const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
     const etiquetaNota = c.etiquetaOrigem === "faturamento" ? " (confirmada no faturamento)" : c.etiquetaOrigem === "devolucao" ? " (custo do envio da devolução no ML)"
@@ -641,7 +658,7 @@
         ["Custo do produto", custoLinha, c.custoNota ? ` (${c.custoNota})` : ""],
       ]));
     const faixaDesfeita = c.pedidoCancelado ? h("div", { class: "faixa aviso-f" }, `Venda cancelada pelo Mercado Livre${c.canceladoEm ? ` em ${fmt(c.canceladoEm)}` : ""}.`) : null;
-    // v1.10.6: erro ao ler o ML e botão para ler de novo agora
+    // v1.11.0: erro ao ler o ML e botão para ler de novo agora
     const msgAt = h("span", { class: "oculto", role: "status" });
     const btAt = h("button", { type: "button", class: "sec mini" }, "Atualizar do Mercado Livre");
     btAt.addEventListener("click", async () => {

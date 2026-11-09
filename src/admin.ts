@@ -169,11 +169,19 @@ function filtroLista(query: express.Request["query"], ator: Ator) {
   else if (/^\d{1,9}$/.test(responsavel)) { where.push("responsavel_id = ?"); args.push(Number(responsavel)); }
   if (q) {
     const like = `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`;
-    where.push("(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\')");
-    args.push(like, like, like, like);
+    // v1.11.0: também pelo rastreio da devolução
+    where.push(`(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'
+      OR id IN (SELECT ocorrencia_id FROM devolucoes WHERE rastreio LIKE ? ESCAPE '\\'))`);
+    args.push(like, like, like, like, like);
+  } else if (ehEquipe(ator)) {
+    // v1.11.0: o perfil Atendimento vê a própria fila; as outras ocorrências só aparecem pela busca
+    where.push("responsavel_id = ?"); args.push((ator as { id: number }).id);
   }
   return { cond: where.length ? "WHERE " + where.join(" AND ") : "", args };
 }
+
+/** Perfil Atendimento (equipe): tela enxuta, com a própria fila e a busca. */
+export const ehEquipe = (ator: Ator) => ator.tipo === "usuario" && ator.papel === "atendimento";
 
 admin.get("/ocorrencias", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
@@ -196,7 +204,9 @@ admin.get("/ocorrencias", (req, res) => {
       return { ...resto, produto: p ? { foto: p.foto, titulo: p.titulo } : null };
     });
   const contagem: Record<string, number> = Object.fromEntries(statusKeys.map((k) => [k, 0]));
-  for (const r of db.prepare("SELECT status, COUNT(*) AS n FROM ocorrencias GROUP BY status").all() as { status: string; n: number }[])
+  const daFila = ehEquipe(req.ator!) ? "WHERE responsavel_id = ?" : "";
+  const argsFila = ehEquipe(req.ator!) ? [(req.ator as { id: number }).id] : [];
+  for (const r of db.prepare(`SELECT status, COUNT(*) AS n FROM ocorrencias ${daFila} GROUP BY status`).all(...argsFila) as { status: string; n: number }[])
     contagem[r.status] = r.n;
     // Quem pode ser responsável (pessoas ativas), para os filtros e o seletor do detalhe
   const equipe = db.prepare("SELECT id, nome FROM usuarios WHERE ativo = 1 ORDER BY nome").all();
@@ -267,7 +277,7 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" ? contaDa(o.id) : null });
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" && !ehEquipe(req.ator!) ? contaDa(o.id) : null });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -439,7 +449,8 @@ const erroDev = (res: express.Response, e: unknown) => {
 admin.get("/devolucoes", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   res.json({
-    ...listarDevolucoes({ status: String(req.query.status ?? ""), q: String(req.query.q ?? ""), pagina, porPagina: 25 }),
+    ...listarDevolucoes({ status: String(req.query.status ?? ""), q: String(req.query.q ?? ""), pagina, porPagina: 25,
+      filaDe: ehEquipe(req.ator!) ? (req.ator as { id: number }).id : null }),
     conferencias: CONFERENCIAS,
   });
 });
@@ -752,6 +763,7 @@ admin.delete("/modelos/:id", soGerente, (req, res) => {
 
 // ---------- Números (v1.3.0) ----------
 admin.get("/estatisticas", (req, res) => {
+  if (ehEquipe(req.ator!)) return res.status(403).json({ erro: "Os números são só para o gerente." });
   const dias = [7, 30, 90, 365].includes(Number(req.query.dias)) ? Number(req.query.dias) : 30;
   const desde = `-${dias} days`;
   const rows = (sql: string, ...a: unknown[]) => db.prepare(sql).all(...a) as any[];
