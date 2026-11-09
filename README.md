@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.10.6
+# Central de Ocorrências — v1.11.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.10.6** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.11.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -91,7 +91,7 @@ A v1.0.0 usa a **API v2 por token** (`pedidos.pesquisa.php`), buscando primeiro 
 
 ## Painel interno (v1.1.0)
 
-Em `/painel`. Perfis: **gerente** (tudo, mais equipe e chaves) e **atendimento** (triagem: status, notas, respostas, fotos).
+Em `/painel`. Perfis: **gerente** (tudo, mais equipe e chaves; envia casos para a fila de cada pessoa) e **atendimento** (tela enxuta: vê a própria fila e acha qualquer outro caso pela busca por protocolo, pedido, comprador ou rastreio; sem números nem conta da venda).
 
 1. Defina `ADMIN_EMAIL` e `ADMIN_PASSWORD` (mín. 10 caracteres) e reinicie: o primeiro gerente é criado. Depois remova `ADMIN_PASSWORD`.
 2. Entre em `/painel`, abra **Equipe** e crie as contas do atendimento.

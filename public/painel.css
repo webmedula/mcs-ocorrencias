@@ -201,3 +201,10 @@ button.perigo { border-color: #b3261e; color: #b3261e; }
 .faixa.conta form.acao { background: #fff; border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
 .faixa.conta details.lanc { font-size: .85rem; }
 .faixa.conta details.lanc ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* v1.11.0: tela enxuta do perfil Atendimento (minha fila + busca) */
+body.modo-equipe .so-gerente { display: none !important; }
+body:not(.modo-equipe) .so-equipe { display: none !important; }
+.cab-fila { padding: 0 0 .5rem; }
+.cab-fila h2 { margin: 0 0 .25rem; }
+.cab-fila .aviso { margin: 0; }

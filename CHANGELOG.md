@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.11.0 — 2026-11-09
+
+- **Tela enxuta para o perfil Atendimento.** Quem é da equipe abre o painel direto em **Minha fila**: só os casos que o gerente enviou ou que a pessoa pegou. Qualquer outro caso aparece pela busca por protocolo, pedido, comprador, e-mail ou **rastreio** da devolução, e pode ser aberto e tratado normalmente. A regra vale também na aba Devoluções e é aplicada no servidor (não é só esconder na tela).
+- Para o Atendimento saem da tela os filtros de canal, origem, fila e pendência ML, a exportação em CSV, a aba Números e a conta da venda.
+- **Gerente envia o caso para a fila de alguém**: no detalhe, o seletor passa a se chamar "Enviar para a fila de"; na lista, "Fila: Fulano" e o filtro "Fila de…". O atalho "Assumir" vira "Pegar para minha fila".
+- A busca da lista de ocorrências passa a achar também pelo rastreio da devolução (para todos os perfis).
+
 ## v1.10.6 — 2026-11-04
 
 - **Conta da venda sem dados agora explica o motivo.** Se a leitura do pedido no Mercado Livre falhar, o erro fica gravado e aparece na conta; e há o botão **"Atualizar do Mercado Livre"** para ler de novo na hora. Sem erro e ainda sem valores, a conta avisa que o ML ainda não foi lido.
