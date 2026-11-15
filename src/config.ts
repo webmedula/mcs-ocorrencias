@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.12.0",
+  version: "1.13.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",

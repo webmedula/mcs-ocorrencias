@@ -1,4 +1,4 @@
-# Central de Ocorrências — v1.12.0
+# Central de Ocorrências — v1.13.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.

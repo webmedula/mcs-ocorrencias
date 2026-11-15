@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.13.0 — 2026-11-15
+
+- **Saúde do produto.** Nova leitura `GET /api/admin/saude-produtos?desde=AAAA-MM-DD&ate=AAAA-MM-DD` (gerente ou chave do Gerente IA): uma linha por reclamação do período com o produto (anúncio MLB, SKU e título), o tipo, o motivo informado pelo Mercado Livre, a conferência da devolução feita pela equipe e o custo para a MCS. Não leva nome, e-mail, telefone, pedido nem texto do cliente. O **mcs-gerente** (v1.6) junta isso com as perguntas do ML (mcs-bot) e a nota do anúncio (ml-analytics) num relatório mensal por produto, para cobrar o fornecedor e corrigir o anúncio antes de a nota cair.
+- Sem migração. Teste: `test/saude.test.ts`.
+
 ## v1.12.0 — 2026-11-09
 
 - **Leitura completa para o Gerente IA.** A chave `mcsia_` passa a ler o que antes era só do gerente humano: status da conexão e do faturamento do Mercado Livre (`GET /ml/status`, `GET /ml/faturamento`), equipe (`GET /usuarios`), lista de backups (`GET /backups`), registro de atividades (`GET /registro`) e os lançamentos brutos do ML de uma ocorrência (`GET /ocorrencias/{protocolo}/ml/financeiro-bruto`). Só leitura: conectar/sincronizar o ML, criar backup, baixar arquivo, criar usuário e as chaves continuam fechados para a chave, e o perfil Atendimento continua sem essas telas. Serve ao serviço **mcs-gerente** (v1.5), que cruza isso com os outros sistemas.
