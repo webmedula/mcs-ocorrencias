@@ -762,7 +762,7 @@ admin.delete("/modelos/:id", soGerente, (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Saúde do produto (v1.13.0): reclamações do período, sem dado pessoal, para o relatório do Gerente IA ----------
+// ---------- Saúde do produto (v1.14.0): reclamações do período, sem dado pessoal, para o relatório do Gerente IA ----------
 admin.get("/saude-produtos", soGerenteOuIA, (req, res) => {
   const p = periodoDe(req.query as Record<string, unknown>);
   if (!p) return res.status(400).json({ erro: "Período inválido. Use ?desde=AAAA-MM-DD&ate=AAAA-MM-DD." });

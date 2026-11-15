@@ -3,7 +3,7 @@ import { novaOcorrencia, subir, type Servidor } from "./ajuda.js";
 import { db } from "../src/db.js";
 import { periodoDe } from "../src/saude.js";
 
-// v1.13.0: reclamações do período para o relatório de saúde do produto (Gerente IA), sem dado pessoal.
+// v1.14.0: reclamações do período para o relatório de saúde do produto (Gerente IA), sem dado pessoal.
 let s: Servidor;
 let chave = "";
 beforeAll(async () => {

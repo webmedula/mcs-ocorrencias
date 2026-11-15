@@ -3,7 +3,7 @@ import { contaDa } from "./conta.js";
 import { db } from "./db.js";
 
 /**
- * SAÚDE DO PRODUTO (v1.13.0): as reclamações de um período, uma linha por ocorrência, com o produto
+ * SAÚDE DO PRODUTO (v1.14.0): as reclamações de um período, uma linha por ocorrência, com o produto
  * e o que se sabe do motivo. Quem junta isso com as perguntas do ML (mcs-bot) e a nota do anúncio
  * (ml-analytics) é o Gerente IA, que monta o relatório mensal por produto.
  *
