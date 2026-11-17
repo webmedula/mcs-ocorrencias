@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.13.0 — 2026-11-15
+
+- **Custo do produto igual ao das promoções e do Gerente IA.** Com `ANALYTICS_BASE_URL` e `ANALYTICS_API_KEY` (o `SERVICE_API_KEY` do ml-analytics), a conta da venda pega o custo unitário de cada SKU na ficha de lucro do ml-analytics (`GET /api/custos/fichas?skus=…`, guardada 30 minutos). SKU sem custo na ficha, ou analytics fora do ar, segue pelo Tiny como antes (kit soma os componentes, variação usa o pai). No painel, o item que veio da ficha aparece com "(ficha de lucro do analytics)". Valor digitado pela equipe continua valendo mais que os dois.
+- Sem as duas variáveis, nada muda. Sem migração. Teste: `test/custo-ficha.test.ts`.
+
 ## v1.12.0 — 2026-11-09
 
 - **Leitura completa para o Gerente IA.** A chave `mcsia_` passa a ler o que antes era só do gerente humano: status da conexão e do faturamento do Mercado Livre (`GET /ml/status`, `GET /ml/faturamento`), equipe (`GET /usuarios`), lista de backups (`GET /backups`), registro de atividades (`GET /registro`) e os lançamentos brutos do ML de uma ocorrência (`GET /ocorrencias/{protocolo}/ml/financeiro-bruto`). Só leitura: conectar/sincronizar o ML, criar backup, baixar arquivo, criar usuário e as chaves continuam fechados para a chave, e o perfil Atendimento continua sem essas telas. Serve ao serviço **mcs-gerente** (v1.5), que cruza isso com os outros sistemas.
