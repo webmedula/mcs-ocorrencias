@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.14.0 — 2026-11-15
+
+- **Saúde do produto.** Nova leitura `GET /api/admin/saude-produtos?desde=AAAA-MM-DD&ate=AAAA-MM-DD` (gerente ou chave do Gerente IA): uma linha por reclamação do período com o produto (anúncio MLB, SKU e título), o tipo, o motivo informado pelo Mercado Livre, a conferência da devolução feita pela equipe e o custo para a MCS. Não leva nome, e-mail, telefone, pedido nem texto do cliente. O **mcs-gerente** (v1.7) junta isso com as perguntas do ML (mcs-bot) e a nota do anúncio (ml-analytics) num relatório mensal por produto, para cobrar o fornecedor e corrigir o anúncio antes de a nota cair.
+- Sem migração. Teste: `test/saude.test.ts`.
+
 ## v1.13.0 — 2026-11-15
 
 - **Custo do produto igual ao das promoções e do Gerente IA.** Com `ANALYTICS_BASE_URL` e `ANALYTICS_API_KEY` (o `SERVICE_API_KEY` do ml-analytics), a conta da venda pega o custo unitário de cada SKU na ficha de lucro do ml-analytics (`GET /api/custos/fichas?skus=…`, guardada 30 minutos). SKU sem custo na ficha, ou analytics fora do ar, segue pelo Tiny como antes (kit soma os componentes, variação usa o pai). No painel, o item que veio da ficha aparece com "(ficha de lucro do analytics)". Valor digitado pela equipe continua valendo mais que os dois.

@@ -24,6 +24,7 @@ import {
   MOTIVOS_CONTESTACAO, atualizarDevolucao, contestarDevolucao, devolucaoDa, listarDevolucoes,
 } from "./devolucoes.js";
 import { atualizarCustoTiny } from "./custo.js";
+import { periodoDe, reclamacoesDoPeriodo } from "./saude.js";
 import { PENDENCIAS_ML, contaDa, editarConta, sincronizarFaturamento, statusFaturamento, type PendenciaMl } from "./conta.js";
 
 const uploadsDir = path.join(config.dataDir, "uploads");
@@ -759,6 +760,13 @@ admin.delete("/modelos/:id", soGerente, (req, res) => {
   if (!id.success) return res.status(400).json({ erro: "Dados inválidos." });
   db.prepare("DELETE FROM modelos WHERE id = ?").run(id.data);
   res.json({ ok: true });
+});
+
+// ---------- Saúde do produto (v1.14.0): reclamações do período, sem dado pessoal, para o relatório do Gerente IA ----------
+admin.get("/saude-produtos", soGerenteOuIA, (req, res) => {
+  const p = periodoDe(req.query as Record<string, unknown>);
+  if (!p) return res.status(400).json({ erro: "Período inválido. Use ?desde=AAAA-MM-DD&ate=AAAA-MM-DD." });
+  res.json(reclamacoesDoPeriodo(p));
 });
 
 // ---------- Números (v1.3.0) ----------
