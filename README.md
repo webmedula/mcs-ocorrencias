@@ -3,7 +3,7 @@
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.12.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.14.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -51,6 +51,7 @@ npm test                 # testes automáticos (banco temporário, nada é envia
 | `PROTOCOL_PREFIX` | Prefixo do protocolo (padrão `MCS`) |
 | `TINY_TOKEN` | Token da API do Tiny (v2). Vazio = sem consulta ao Tiny |
 | `TINY_CUSTO` | Custo do produto na conta da venda: `custo` (padrão, preço de custo do cadastro) ou `medio` (custo médio) |
+| `ANALYTICS_BASE_URL`, `ANALYTICS_API_KEY` | Ficha de lucro do ml-analytics (v1.13.0): endereço do analytics e o `SERVICE_API_KEY` dele. Com as duas, o custo do produto vem de lá (o mesmo das promoções e do Gerente IA) e o Tiny fica de reserva. Vazio = só Tiny |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Aviso de nova ocorrência. Vazio = desligado |
 | `SMTP_*`, `MAIL_FROM` | E-mail de confirmação. Sem `SMTP_HOST`, só registra no log |
 | `IP_SALT` | Texto aleatório; o IP é guardado apenas como hash |

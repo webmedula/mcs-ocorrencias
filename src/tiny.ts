@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { chaveSku, custosDaFicha } from "./analytics.js";
 
 export type TinyResultado =
   | { status: "desligado" }
@@ -181,7 +182,8 @@ async function custoUnitario(id: string, nivel = 0): Promise<number | null> {
   return pai && String(pai) !== "0" && nivel < 2 ? custoUnitario(String(pai), nivel + 1) : null;
 }
 
-export interface CustoItem { sku: string | null; titulo: string | null; qtd: number; unitario: number | null; total: number | null }
+/** `origem: "ficha"` quando o custo veio da ficha de lucro do ml-analytics (sem o campo, veio do Tiny). */
+export interface CustoItem { sku: string | null; titulo: string | null; qtd: number; unitario: number | null; total: number | null; origem?: "ficha" }
 export interface CustoPedido { itens: CustoItem[]; total: number | null; faltando: string[] }
 
 /** Custo dos itens do pedido no Tiny, em reais. `total` fica null se algum item não tem custo no cadastro. Lança se o Tiny falhar. */
@@ -190,16 +192,20 @@ export async function custosDoPedido(idPedido: string): Promise<CustoPedido> {
   const itens: any[] = (r?.pedido?.itens ?? []).map((x: any) => x?.item ?? x).slice(0, 20);
   const out: CustoItem[] = [];
   const faltando: string[] = [];
+  // v1.13.0: o custo da ficha de lucro do ml-analytics vale primeiro (mesmo número das promoções e do Gerente IA)
+  const daFicha = await custosDaFicha(itens.map((it) => (it?.codigo ? String(it.codigo) : null)));
   for (const it of itens) {
     const id = it?.id_produto != null && String(it.id_produto) !== "" && String(it.id_produto) !== "0" ? String(it.id_produto) : null;
     const qtd = num(it?.quantidade) ?? 1;
-    const unitario = id ? await custoUnitario(id) : null;
+    const ficha = it?.codigo ? daFicha.get(chaveSku(String(it.codigo))) : undefined;
+    const unitario = ficha ?? (id ? await custoUnitario(id) : null);
     const nome = it?.codigo ? String(it.codigo) : it?.descricao ? String(it.descricao) : "item sem código";
     if (unitario == null) faltando.push(nome);
     out.push({
       sku: it?.codigo ? String(it.codigo) : null, titulo: it?.descricao ? String(it.descricao) : null, qtd,
       unitario: unitario == null ? null : Math.round(unitario * 100) / 100,
       total: unitario == null ? null : Math.round(unitario * qtd * 100) / 100,
+      ...(ficha != null ? { origem: "ficha" as const } : {}),
     });
   }
   const total = out.length && !faltando.length ? Math.round(out.reduce((t, i) => t + (i.total ?? 0), 0) * 100) / 100 : null;

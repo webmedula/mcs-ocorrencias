@@ -27,6 +27,10 @@ export const config = {
   tinyBaseUrl: env.TINY_BASE_URL ?? "https://api.tiny.com.br/api2",
   // Custo do produto na conta da venda (v1.10.0): "custo" = preço de custo do cadastro; "medio" = custo médio
   tinyCusto: (env.TINY_CUSTO === "medio" ? "medio" : "custo") as "custo" | "medio",
+  // Ficha de lucro do ml-analytics (v1.13.0): o custo do produto vem de lá, o mesmo número das promoções e do
+  // Gerente IA. Vazio = a Central calcula sozinha pelo Tiny, como antes. A chave é o SERVICE_API_KEY do analytics.
+  analyticsBaseUrl: (env.ANALYTICS_BASE_URL ?? "").trim().replace(/\/+$/, ""),
+  analyticsApiKey: (env.ANALYTICS_API_KEY ?? "").trim(),
   // Telegram. Vazio = aviso desligado.
   telegramToken: env.TELEGRAM_BOT_TOKEN ?? "",
   telegramChatId: env.TELEGRAM_CHAT_ID ?? "",

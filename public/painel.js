@@ -1,4 +1,4 @@
-// Central de Ocorrências v1.11.0 — painel interno
+// Central de Ocorrências v1.13.0 — painel interno
 (function () {
   const $ = (s) => document.querySelector(s);
   const STATUS_INT = { nova: "Nova", em_analise: "Em análise", aguardando_cliente: "Aguardando cliente", resolvida: "Resolvida" };
@@ -695,7 +695,8 @@
       itensCusto.length
         ? h("details", { class: "lanc" }, h("summary", {}, `Custo no Tiny: ${c.custoTiny == null ? "incompleto" : reaisTxt(c.custoTiny)}${c.custoOrigem === "manual" && c.custoTiny != null ? " (a conta usa o valor digitado)" : ""}`),
             h("ul", {}, itensCusto.map((i) => h("li", {}, `${i.qtd} × ${i.sku || i.titulo}${i.sku && i.titulo ? ` · ${i.titulo}` : ""} · `,
-              i.unitario == null ? h("b", { class: "neg" }, "sem custo no cadastro") : h("b", {}, `${reaisTxt(i.unitario)} cada = ${reaisTxt(i.total)}`)))))
+              i.unitario == null ? h("b", { class: "neg" }, "sem custo no cadastro") : h("b", {}, `${reaisTxt(i.unitario)} cada = ${reaisTxt(i.total)}`),
+              i.origem === "ficha" ? h("small", {}, " (ficha de lucro do analytics)") : null))))
         : null,
       c.custoTinyErro ? h("p", { class: "aviso" }, c.custoTinyErro) : null,
       h("p", { class: "aviso" }, c.custoTinyEm ? `Custo lido do Tiny em ${fmt(c.custoTinyEm)}. ` : "Custo ainda não buscado no Tiny. ", btTiny, msgTiny));
