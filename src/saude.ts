@@ -40,7 +40,9 @@ export function reclamacoesDoPeriodo(p: PeriodoSaude) {
        FROM ocorrencias o
        LEFT JOIN devolucoes d ON d.ocorrencia_id = o.id
        LEFT JOIN conta_venda c ON c.ocorrencia_id = o.id
-      WHERE o.criado_em >= ? AND o.criado_em < date(?, '+1 day')
+      -- v1.14.1: pela data em que o cliente abriu a reclamação no ML (date_created, no fuso do ML), não pela data em
+      -- que a Central importou. A importação do histórico, em 12/10/2026, punha meses de reclamações num dia só.
+      WHERE substr(COALESCE(json_extract(o.ml_json, '$.date_created'), o.criado_em), 1, 10) BETWEEN ? AND ?
       ORDER BY o.criado_em`,
   ).all(p.desde, p.ate) as Linha[];
 
@@ -56,6 +58,7 @@ export function reclamacoesDoPeriodo(p: PeriodoSaude) {
     return {
       protocolo: o.protocolo,
       criadoEm: o.criado_em,
+      abertaEm: json(o.ml_json)?.date_created ?? o.criado_em,
       origem: o.origem,
       canal: o.canal,
       tipo: o.tipo,

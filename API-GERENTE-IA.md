@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.14.0
+# API do Gerente IA — Central de Ocorrências v1.14.1
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
@@ -41,7 +41,7 @@ Base: `https://atendimento.mcs.ind.br/api/admin`
 | Lista de backups (v1.12.0) | `GET /backups` (só nomes, tamanho e data) | sim |
 | Criar ou baixar backup | `POST /backups`, `GET /backups/{nome}`, `GET /backups/fotos.tar.gz` | **não** |
 | Registro de atividades (v1.12.0) | `GET /registro` (`?so=acessos` só logins e alertas; últimas 100 linhas) | sim |
-| Saúde do produto (v1.14.0) | `GET /saude-produtos?desde=AAAA-MM-DD&ate=AAAA-MM-DD` (uma linha por reclamação do período: produto, tipo, motivo do ML, conferência da devolução, custo; sem nome, e-mail, telefone ou pedido) | sim |
+| Saúde do produto (v1.14.1) | `GET /saude-produtos?desde=AAAA-MM-DD&ate=AAAA-MM-DD` (uma linha por reclamação do período: produto, tipo, motivo do ML, conferência da devolução, custo; sem nome, e-mail, telefone ou pedido) | sim |
 | Equipe (v1.12.0) | `GET /usuarios` (nome, e-mail, papel, ativo, último login) | sim |
 | Criar/editar pessoas, chaves | `POST/PATCH /usuarios`, `/chaves` | **não** |
 
