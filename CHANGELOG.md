@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.14.1 — 2026-11-19
+
+- **Saúde do produto pela data da reclamação.** `GET /saude-produtos` passa a filtrar o período pela data em que o cliente abriu a reclamação no Mercado Livre (`date_created`), não pela data em que a Central a importou. A importação do histórico em 12/10/2026 punha meses de reclamações em outubro. Cada linha traz `abertaEm`. Ocorrência do formulário segue pela data de criação.
+
 ## v1.14.0 — 2026-11-15
 
 - **Saúde do produto.** Nova leitura `GET /api/admin/saude-produtos?desde=AAAA-MM-DD&ate=AAAA-MM-DD` (gerente ou chave do Gerente IA): uma linha por reclamação do período com o produto (anúncio MLB, SKU e título), o tipo, o motivo informado pelo Mercado Livre, a conferência da devolução feita pela equipe e o custo para a MCS. Não leva nome, e-mail, telefone, pedido nem texto do cliente. O **mcs-gerente** (v1.7) junta isso com as perguntas do ML (mcs-bot) e a nota do anúncio (ml-analytics) num relatório mensal por produto, para cobrar o fornecedor e corrigir o anúncio antes de a nota cair.

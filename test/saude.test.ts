@@ -47,6 +47,14 @@ describe("saúde do produto", () => {
     expect(texto).not.toContain("SAUDE-1");
 
     expect((await (await comoIA("/saude-produtos?desde=2026-11-01&ate=2026-11-30")).json()).total).toBe(0);
+
+    // Reclamação do ML importada em outubro, mas aberta pelo cliente em agosto: conta em agosto.
+    db.prepare("UPDATE ocorrencias SET ml_json = ? WHERE protocolo = ?").run(
+      JSON.stringify({ motivo: "broken_item", date_created: "2026-08-20T10:00:00.000-04:00" }), protocolo);
+    expect((await (await comoIA("/saude-produtos?desde=2026-10-01&ate=2026-10-31")).json()).total).toBe(0);
+    const ago = await (await comoIA("/saude-produtos?desde=2026-08-01&ate=2026-08-31")).json();
+    expect(ago.total).toBe(1);
+    expect(ago.ocorrencias[0].abertaEm).toBe("2026-08-20T10:00:00.000-04:00");
     expect((await comoIA("/saude-produtos?desde=xx")).status).toBe(400);
   });
 
