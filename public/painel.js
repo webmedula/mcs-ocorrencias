@@ -83,7 +83,7 @@
     for (const b of document.querySelectorAll(".aba")) b.classList.toggle("ativa", b.dataset.aba === nome);
     for (const v of ["ocorrencias", "devolucoes", "equipe", "numeros", "conta", "esqueci", "redefinir"]) mostrar($("#v-" + v), v === nome);
     if (nome === "ocorrencias") { carregarLista().then(() => abrirDoHash()); }
-    if (nome === "devolucoes") carregarDevolucoes();
+    if (nome === "devolucoes") { carregarDevolucoes(); setTimeout(() => $("#bp-codigo")?.focus(), 0); }
     if (nome === "equipe") carregarEquipe();
     if (nome === "numeros") carregarNumeros();
     if (nome === "conta") api("GET", "/me").then((r) => { if (r.ok) $("#c-avisos").checked = Boolean(r.json.avisarEmail); });
@@ -561,9 +561,42 @@
       if (r.ok) await recarregar(); else { custoMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(custoMsg, true); }
     });
 
+    // v1.18.0: conferência rápida (um clique) quando o pacote foi bipado, ou ainda não conferido
+    const bipado = estado.bipado === o.protocolo;
+    if (bipado) estado.bipado = null;
+    let confRapida = null;
+    if (bipado || !d.conferencia) {
+      const rapMsg = h("p", { class: "msg-ok oculto", role: "status" });
+      const proximo = h("button", { type: "button", class: "mini oculto" }, "Bipar o próximo pacote");
+      proximo.addEventListener("click", () => irParaBipar());
+      const botoes = ["ok", "danificado", "incompleto", "diferente", "sem_produto"].map((k) => {
+        const b = h("button", { type: "button", class: k === "ok" ? "" : "sec" }, CONFERENCIA[k]);
+        b.addEventListener("click", async () => {
+          for (const x of botoes) x.disabled = true;
+          const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { conferencia: k });
+          if (r.ok) {
+            rapMsg.textContent = `Conferido: ${CONFERENCIA[k]}.` + (k === "ok" ? "" : " Descreva o problema nas observações abaixo.");
+            for (const x of botoes) x.disabled = false;
+            mostrar(rapMsg, true); mostrar(proximo, true); bipe(true);
+            confSel.value = k; d.conferencia = k;
+            if (k === "ok") proximo.focus(); else confObs.focus();
+          } else {
+            for (const x of botoes) x.disabled = false;
+            rapMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(rapMsg, true); bipe(false);
+          }
+        });
+        return b;
+      });
+      confRapida = h("div", { class: "conf-rapida", id: "conf-rapida" },
+        h("strong", {}, bipado ? "Pacote bipado. Como o produto voltou?" : "Conferência rápida: como o produto voltou?"),
+        d.conferencia ? h("p", { class: "aviso" }, `Já conferido: ${CONFERENCIA[d.conferencia] || d.conferencia}. Clique para trocar.`) : null,
+        h("div", { class: "botoes" }, botoes), rapMsg, proximo);
+      if (bipado) setTimeout(() => { confRapida.scrollIntoView({ behavior: "smooth", block: "center" }); botoes[0].focus({ preventScroll: true }); }, 50);
+    }
+
     return h("div", { class: "faixa ml-info devolucao" },
       h("h3", {}, "Devolução"), h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
-      faixaLiberar, links, msgTopo, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
+      faixaLiberar, links, msgTopo, confRapida, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
   }
 
   function blocoContestacao(o, recarregar) {
@@ -1023,6 +1056,55 @@
   $("#p-ant").addEventListener("click", () => { estado.filtro.pagina--; carregarLista(); });
   $("#p-prox").addEventListener("click", () => { estado.filtro.pagina++; carregarLista(); });
   let esperaDev;
+  // ---------- Leitor de código de barras (v1.18.0) ----------
+  // O leitor USB digita o código e dá Enter. Bipou: acha o caso pela etiqueta e abre direto na conferência.
+  let audio = null;
+  function bipe(ok) {
+    try {
+      audio ??= new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audio.createOscillator(), g = audio.createGain();
+      osc.frequency.value = ok ? 1200 : 220; osc.type = ok ? "sine" : "square";
+      g.gain.value = 0.08; osc.connect(g); g.connect(audio.destination);
+      osc.start(); osc.stop(audio.currentTime + (ok ? 0.12 : 0.45));
+    } catch { /* sem som */ }
+  }
+  function irParaBipar() {
+    abrirAba("devolucoes");
+    const i = $("#bp-codigo"); i.value = ""; $("#bp-msg").replaceChildren(); i.focus();
+  }
+  function abrirBipado(protocolo) {
+    estado.bipado = protocolo;
+    estado.aberto = null;
+    location.hash = encodeURIComponent(protocolo);
+    abrirAba("ocorrencias");
+  }
+  $("#bipar").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const campo = $("#bp-codigo"), msg = $("#bp-msg");
+    const codigo = campo.value.trim();
+    if (!codigo) return;
+    msg.replaceChildren(h("p", { class: "aviso" }, "Procurando…"));
+    const r = await api("GET", "/bipar?codigo=" + encodeURIComponent(codigo));
+    const itens = r.ok ? r.json.itens : [];
+    if (!r.ok || !itens.length) {
+      bipe(false);
+      msg.replaceChildren(h("p", { class: "bp-erro" }, r.ok
+        ? `Nenhum caso com o código ${codigo}. Confira se é a etiqueta do Mercado Livre, ou busque pelo pedido ou comprador na lista.`
+        : r.json.erro || "Não foi possível procurar."));
+      campo.select();
+      return;
+    }
+    if (itens.length === 1) { bipe(true); msg.replaceChildren(); campo.value = ""; abrirBipado(itens[0].protocolo); return; }
+    bipe(true);
+    msg.replaceChildren(h("div", { class: "bp-opcoes" }, h("p", { class: "aviso" }, `${itens.length} casos com esse código. Escolha:`),
+      itens.map((i) => {
+        const b = h("button", { type: "button", class: "sec" }, `${i.protocolo} · ${i.nome} · pedido ${i.pedido}${i.produto?.titulo ? " · " + i.produto.titulo : ""}`);
+        b.addEventListener("click", () => { campo.value = ""; msg.replaceChildren(); abrirBipado(i.protocolo); });
+        return b;
+      })));
+    campo.select();
+  });
+
   $("#dv-busca").addEventListener("input", (e) => {
     clearTimeout(esperaDev);
     esperaDev = setTimeout(() => { estado.devFiltro.q = e.target.value.trim(); estado.devFiltro.pagina = 1; carregarDevolucoes(); }, 300);

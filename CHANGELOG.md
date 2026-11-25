@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.18.0 — 2026-11-25
+
+- **Leitor de código de barras nas devoluções.** A aba Devoluções ganha o campo **Bipar pacote**, já com o cursor nele ao abrir a aba. É só apontar o leitor USB para a etiqueta do Mercado Livre: o leitor digita o código e dá Enter, e a Central abre o caso direto na devolução, com bip de confirmação. Aceita o código de barras (número do envio da devolução), o QR da etiqueta (inclusive com o teclado em outro layout), o rastreio, o número da devolução, da reclamação, do pedido ou o protocolo. A busca é exata, para não abrir um caso parecido. Código desconhecido: bip grave e aviso em vermelho, com o código selecionado para bipar de novo. Mais de um caso com o mesmo código: lista para escolher.
+- **Conferência rápida.** No caso aberto pelo bipe (e nas devoluções ainda não conferidas) aparecem botões grandes: Voltou em bom estado, Danificado, Incompleto, Produto diferente e Caixa sem o produto. Um clique grava a conferência (com quem e quando, como antes). Nada é gravado só por bipar. Depois, o botão **Bipar o próximo pacote** volta para o campo do leitor. Quando há problema, o cursor vai para as observações.
+- Funciona para os dois perfis. Nova rota `GET /api/admin/bipar?codigo=…`. Sem migração. Teste: `test/bipar.test.ts`.
+
 ## v1.17.0 — 2026-11-25
 
 - **Perfil Atendimento sem custos e valores.** Pensado para o funcionário que cuida das devoluções: ele continua vendo e tratando os casos da fila (status, respostas, mensagens do ML, conferência do produto que voltou, motivo real, contestação e desfecho), mas não vê nem lança nada da conta da MCS. Some para ele: o custo do desfecho, o quadro "Custos da devolução" (frete, produto perdido, outros custos, reembolso e recuperado), a coluna de custo na aba Devoluções e os valores em reais no histórico interno. Conta da venda, aba Números, CSV e dados financeiros brutos do ML já eram fechados (v1.11.0).
