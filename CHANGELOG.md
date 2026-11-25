@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.17.0 — 2026-11-25
+
+- **Perfil Atendimento sem custos e valores.** Pensado para o funcionário que cuida das devoluções: ele continua vendo e tratando os casos da fila (status, respostas, mensagens do ML, conferência do produto que voltou, motivo real, contestação e desfecho), mas não vê nem lança nada da conta da MCS. Some para ele: o custo do desfecho, o quadro "Custos da devolução" (frete, produto perdido, outros custos, reembolso e recuperado), a coluna de custo na aba Devoluções e os valores em reais no histórico interno. Conta da venda, aba Números, CSV e dados financeiros brutos do ML já eram fechados (v1.11.0).
+- A regra vale no servidor, não só na tela: as respostas da API chegam sem esses campos, e tentar lançar custo, mexer na conta da venda, buscar custo no Tiny ou baixar o CSV com esse perfil dá erro 403. Quando ele troca o desfecho, o custo lançado pelo gerente fica como está.
+- O valor do pedido e o preço dos produtos continuam visíveis (o cliente sabe quanto pagou).
+- Sem migração. Teste: `test/sem-custos.test.ts`.
+
 ## v1.16.0 — 2026-11-25
 
 - **E-mail de atendimento resolvido.** Quando a equipe marca uma ocorrência do formulário como **Resolvida**, o cliente recebe na hora um e-mail ("seu atendimento foi resolvido") no mesmo padrão do de confirmação: protocolo, a solução (o desfecho registrado, menos "Sem ação (improcedente)") e o botão "Acompanhar atendimento", com o aviso de que pode responder por lá para reabrir. Se a pesquisa de satisfação estiver ligada, o e-mail avisa que ela chega em seguida.

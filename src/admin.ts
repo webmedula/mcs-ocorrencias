@@ -184,6 +184,21 @@ function filtroLista(query: express.Request["query"], ator: Ator) {
 /** Perfil Atendimento (equipe): tela enxuta, com a própria fila e a busca. */
 export const ehEquipe = (ator: Ator) => ator.tipo === "usuario" && ator.papel === "atendimento";
 
+// v1.17.0: o perfil Atendimento (funcionário das devoluções) não vê nem mexe em custos e valores da MCS
+const MSG_SEM_CUSTOS = "Custos e valores são só para o gerente.";
+const semCustosParaEquipe = (req: express.Request, res: express.Response, next: express.NextFunction): void => {
+  if (req.ator && ehEquipe(req.ator)) { res.status(403).json({ erro: MSG_SEM_CUSTOS }); return; }
+  next();
+};
+/** Tira os valores em reais do histórico interno (desfecho com custo, custos da devolução, conta da venda). */
+const ocultarValores = (texto: string) => texto.replace(/R\$\s?-?[\d.]*\d(,\d{1,2})?/g, "R$ •••");
+/** Devolução sem o quadro de custos, para o perfil Atendimento. */
+export function devolucaoParaEquipe<T extends { custos?: unknown } | null>(d: T): T {
+  if (!d) return d;
+  const { custos: _c, ...resto } = d as any;
+  return { ...resto, custos: null } as T;
+}
+
 admin.get("/ocorrencias", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const porPagina = 25;
@@ -217,7 +232,7 @@ admin.get("/ocorrencias", (req, res) => {
 
 // Exportação da lista em CSV, com os mesmos filtros (v1.6.0). Tem dados pessoais: só pessoas, e fica no registro.
 const LIMITE_CSV = 20000;
-admin.get("/ocorrencias.csv", soPessoas, (req, res) => {
+admin.get("/ocorrencias.csv", soPessoas, semCustosParaEquipe, (req, res) => {
   const { cond, args } = filtroLista(req.query, req.ator!);
   const linhas = db
     .prepare(
@@ -278,7 +293,13 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" && !ehEquipe(req.ator!) ? contaDa(o.id) : null });
+  if (ehEquipe(req.ator!)) {
+    const { custo_centavos: _custo, ...semCusto } = resto;
+    const evs = (eventos as { texto: string; do_cliente: number }[]).map((e) => (e.do_cliente ? e : { ...e, texto: ocultarValores(e.texto) }));
+    return res.json({ ...semCusto, custo_centavos: null, tiny, anexos, eventos: evs, ml, produtos: produtosDe(pj), pesquisa, responsavel,
+      devolucao: devolucaoParaEquipe(devolucaoDa(o.id)), conta: null });
+  }
+  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" ? contaDa(o.id) : null });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -346,9 +367,12 @@ admin.patch("/ocorrencias/:protocolo/desfecho", (req, res) => {
   if (!p.success) return invalido(res, p.error);
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
-  // Sem desfecho não há custo a registrar
-  const centavos = p.data.custo == null || !p.data.desfecho ? null : Math.round(p.data.custo * 100);
-  if (o.desfecho === p.data.desfecho && o.custo_centavos === centavos) return res.json({ desfecho: o.desfecho, custo: p.data.custo ?? null });
+  const equipe = ehEquipe(req.ator!);
+  if (equipe && p.data.custo != null) return res.status(403).json({ erro: MSG_SEM_CUSTOS });
+  // Sem desfecho não há custo a registrar; o Atendimento escolhe o desfecho e o custo lançado pelo gerente fica como está
+  const centavos = !p.data.desfecho ? null : equipe ? o.custo_centavos : p.data.custo == null ? null : Math.round(p.data.custo * 100);
+  const custoResp = equipe || centavos == null ? null : centavos / 100;
+  if (o.desfecho === p.data.desfecho && o.custo_centavos === centavos) return res.json({ desfecho: o.desfecho, custo: custoResp });
   const descricao = p.data.desfecho
     ? `Desfecho registrado: ${DESFECHOS[p.data.desfecho]}${centavos != null ? ` · custo R$ ${reais(centavos)}` : ""}.`
     : "Desfecho removido.";
@@ -356,7 +380,7 @@ admin.patch("/ocorrencias/:protocolo/desfecho", (req, res) => {
     db.prepare("UPDATE ocorrencias SET desfecho = ?, custo_centavos = ?, atualizado_em = datetime('now') WHERE id = ?").run(p.data.desfecho, centavos, o.id);
     db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)").run(o.id, descricao, nomeDoAtor(req.ator!));
   })();
-  res.json({ desfecho: p.data.desfecho, custo: centavos == null ? null : centavos / 100 });
+  res.json({ desfecho: p.data.desfecho, custo: custoResp });
 });
 
 // Responsável pela ocorrência (v1.7.0). Pessoas e Gerente IA; null tira o responsável.
@@ -483,9 +507,13 @@ const erroDev = (res: express.Response, e: unknown) => {
 // Fila da equipe: todas as devoluções, as que pedem ação primeiro. O Gerente IA também lê.
 admin.get("/devolucoes", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
+  const equipe = ehEquipe(req.ator!);
+  const lista = listarDevolucoes({ status: String(req.query.status ?? ""), q: String(req.query.q ?? ""), pagina, porPagina: 25,
+    filaDe: equipe ? (req.ator as { id: number }).id : null });
+  // v1.17.0: sem a coluna de custo para o Atendimento
+  if (equipe) lista.itens = lista.itens.map((i: any) => ({ ...i, custo: null }));
   res.json({
-    ...listarDevolucoes({ status: String(req.query.status ?? ""), q: String(req.query.q ?? ""), pagina, porPagina: 25,
-      filaDe: ehEquipe(req.ator!) ? (req.ator as { id: number }).id : null }),
+    ...lista,
     conferencias: CONFERENCIAS,
   });
 });
@@ -495,7 +523,7 @@ admin.get("/ocorrencias/:protocolo/devolucao", (req, res) => {
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   const d = devolucaoDa(o.id);
   if (!d) return res.status(404).json({ erro: "Esta ocorrência não tem devolução." });
-  res.json(d);
+  res.json(ehEquipe(req.ator!) ? devolucaoParaEquipe(d) : d);
 });
 
 const valor = z.number({ invalid_type_error: "Valor inválido." }).min(0, "O valor não pode ser negativo.").max(1_000_000, "Valor alto demais.").nullable().optional();
@@ -515,8 +543,13 @@ admin.patch("/ocorrencias/:protocolo/devolucao", soPessoas, (req, res) => {
   if (!p.success) return invalido(res, p.error);
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
+  const equipe = ehEquipe(req.ator!);
+  // Atendimento confere o produto e registra o motivo, mas não lança custos
+  if (equipe && (["frete", "perda", "outros", "reembolso", "recuperado"] as const).some((k) => p.data[k] !== undefined))
+    return res.status(403).json({ erro: MSG_SEM_CUSTOS });
   try {
-    res.json(atualizarDevolucao(o.id, p.data, nomeDoAtor(req.ator!)));
+    const d = atualizarDevolucao(o.id, p.data, nomeDoAtor(req.ator!));
+    res.json(equipe ? devolucaoParaEquipe(d) : d);
   } catch (e) {
     return erroDev(res, e);
   }
@@ -529,7 +562,7 @@ admin.post("/ocorrencias/:protocolo/devolucao/atualizar", soPessoas, async (req,
   if (o.origem !== "ml") return res.status(400).json({ erro: "Esta ocorrência não veio do Mercado Livre." });
   try {
     await atualizarOcorrenciaMl(o);
-    res.json(devolucaoDa(o.id));
+    res.json(ehEquipe(req.ator!) ? devolucaoParaEquipe(devolucaoDa(o.id)) : devolucaoDa(o.id));
   } catch (e) {
     return erroDev(res, e);
   }
@@ -563,7 +596,7 @@ admin.post("/ocorrencias/:protocolo/devolucao/contestar", soPessoas, (req, res, 
   try {
     await contestarDevolucao(o, p.data.motivo, p.data.mensagem, fotos, nomeDoAtor(a));
     registrar("devolucao_contestada", { usuarioId: (a as { id: number }).id, detalhe: o.protocolo, req });
-    res.status(201).json(devolucaoDa(o.id));
+    res.status(201).json(ehEquipe(req.ator!) ? devolucaoParaEquipe(devolucaoDa(o.id)) : devolucaoDa(o.id));
   } catch (e) {
     return erroDev(res, e);
   }
@@ -586,7 +619,7 @@ admin.get("/ocorrencias/:protocolo/ml/financeiro-bruto", soGerenteOuIA, async (r
 
 // ---------- Conta da venda (v1.9.0) ----------
 const pendenciaKeys = Object.keys(PENDENCIAS_ML) as [PendenciaMl, ...PendenciaMl[]];
-admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
+admin.patch("/ocorrencias/:protocolo/conta", soPessoas, semCustosParaEquipe, (req, res) => {
   const p = z
     .object({
       custoProduto: valor,
@@ -604,7 +637,7 @@ admin.patch("/ocorrencias/:protocolo/conta", soPessoas, (req, res) => {
 });
 
 // Conta da venda: lê de novo o pedido no ML agora (v1.10.6)
-admin.post("/ocorrencias/:protocolo/conta/atualizar", soPessoas, async (req, res) => {
+admin.post("/ocorrencias/:protocolo/conta/atualizar", soPessoas, semCustosParaEquipe, async (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (!o.pedido) return res.status(400).json({ erro: "Esta ocorrência não tem número de pedido do Mercado Livre." });
@@ -617,7 +650,7 @@ admin.post("/ocorrencias/:protocolo/conta/atualizar", soPessoas, async (req, res
 });
 
 // Custo do produto pelo Tiny (v1.10.0): busca de novo agora (botão na conta da venda)
-admin.post("/ocorrencias/:protocolo/custo-tiny", soPessoas, async (req, res) => {
+admin.post("/ocorrencias/:protocolo/custo-tiny", soPessoas, semCustosParaEquipe, async (req, res) => {
   const o = oc(req.params.protocolo);
   if (!o) return res.status(404).json({ erro: "Ocorrência não encontrada." });
   if (o.origem !== "ml") return res.status(400).json({ erro: "A conta da venda só existe para ocorrências do Mercado Livre." });
