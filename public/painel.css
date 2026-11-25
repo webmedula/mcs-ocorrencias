@@ -218,6 +218,4 @@ body:not(.modo-equipe) .so-equipe { display: none !important; }
 .bp-erro { background: #fde8e8; color: #8a1c1c; padding: 10px 14px; border-radius: 10px; font-weight: 600; }
 .bp-opcoes { display: flex; flex-direction: column; gap: 6px; }
 .bp-opcoes button { text-align: left; }
-.conf-rapida { border: 2px solid var(--laranja); border-radius: 14px; padding: 12px 14px; margin: 8px 0; background: #fff8f3; }
-.conf-rapida .botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-.conf-rapida .botoes button { min-height: 48px; flex: 1 1 160px; font-size: 1rem; }
+.devolucao.bipado { box-shadow: 0 0 0 3px var(--laranja); }

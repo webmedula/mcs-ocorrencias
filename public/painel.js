@@ -561,42 +561,15 @@
       if (r.ok) await recarregar(); else { custoMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(custoMsg, true); }
     });
 
-    // v1.18.0: conferência rápida (um clique) quando o pacote foi bipado, ou ainda não conferido
+    // v1.18.0: caso aberto pelo leitor de código de barras: rola até a devolução
     const bipado = estado.bipado === o.protocolo;
     if (bipado) estado.bipado = null;
-    let confRapida = null;
-    if (bipado || !d.conferencia) {
-      const rapMsg = h("p", { class: "msg-ok oculto", role: "status" });
-      const proximo = h("button", { type: "button", class: "mini oculto" }, "Bipar o próximo pacote");
-      proximo.addEventListener("click", () => irParaBipar());
-      const botoes = ["ok", "danificado", "incompleto", "diferente", "sem_produto"].map((k) => {
-        const b = h("button", { type: "button", class: k === "ok" ? "" : "sec" }, CONFERENCIA[k]);
-        b.addEventListener("click", async () => {
-          for (const x of botoes) x.disabled = true;
-          const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { conferencia: k });
-          if (r.ok) {
-            rapMsg.textContent = `Conferido: ${CONFERENCIA[k]}.` + (k === "ok" ? "" : " Descreva o problema nas observações abaixo.");
-            for (const x of botoes) x.disabled = false;
-            mostrar(rapMsg, true); mostrar(proximo, true); bipe(true);
-            confSel.value = k; d.conferencia = k;
-            if (k === "ok") proximo.focus(); else confObs.focus();
-          } else {
-            for (const x of botoes) x.disabled = false;
-            rapMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(rapMsg, true); bipe(false);
-          }
-        });
-        return b;
-      });
-      confRapida = h("div", { class: "conf-rapida", id: "conf-rapida" },
-        h("strong", {}, bipado ? "Pacote bipado. Como o produto voltou?" : "Conferência rápida: como o produto voltou?"),
-        d.conferencia ? h("p", { class: "aviso" }, `Já conferido: ${CONFERENCIA[d.conferencia] || d.conferencia}. Clique para trocar.`) : null,
-        h("div", { class: "botoes" }, botoes), rapMsg, proximo);
-      if (bipado) setTimeout(() => { confRapida.scrollIntoView({ behavior: "smooth", block: "center" }); botoes[0].focus({ preventScroll: true }); }, 50);
-    }
 
-    return h("div", { class: "faixa ml-info devolucao" },
+    const bloco = h("div", { class: "faixa ml-info devolucao" + (bipado ? " bipado" : "") },
       h("h3", {}, "Devolução"), h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
-      faixaLiberar, links, msgTopo, confRapida, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
+      faixaLiberar, links, msgTopo, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
+    if (bipado) setTimeout(() => bloco.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    return bloco;
   }
 
   function blocoContestacao(o, recarregar) {
@@ -1067,10 +1040,6 @@
       g.gain.value = 0.08; osc.connect(g); g.connect(audio.destination);
       osc.start(); osc.stop(audio.currentTime + (ok ? 0.12 : 0.45));
     } catch { /* sem som */ }
-  }
-  function irParaBipar() {
-    abrirAba("devolucoes");
-    const i = $("#bp-codigo"); i.value = ""; $("#bp-msg").replaceChildren(); i.focus();
   }
   function abrirBipado(protocolo) {
     estado.bipado = protocolo;
