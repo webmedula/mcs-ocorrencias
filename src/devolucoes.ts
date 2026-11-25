@@ -394,8 +394,11 @@ export function listarDevolucoes(filtro: { status?: string; q?: string; pagina: 
   const q = (filtro.q ?? "").trim().slice(0, 80);
   if (q) {
     const like = `%${q.replace(/[%_\\]/g, (c) => "\\" + c)}%`;
-    where.push("(o.protocolo LIKE ? ESCAPE '\\' OR o.pedido LIKE ? ESCAPE '\\' OR o.nome LIKE ? ESCAPE '\\' OR d.rastreio LIKE ? ESCAPE '\\')");
-    args.push(like, like, like, like);
+    // v1.17.0: também pelos códigos do ML da etiqueta (envio da devolução, devolução, reclamação, envio de ida)
+    where.push(`(o.protocolo LIKE ? ESCAPE '\\' OR o.pedido LIKE ? ESCAPE '\\' OR o.nome LIKE ? ESCAPE '\\' OR d.rastreio LIKE ? ESCAPE '\\'
+      OR d.envio_id = ? OR d.return_id = ? OR o.ml_claim_id = ?
+      OR o.id IN (SELECT ocorrencia_id FROM conta_venda WHERE envio_ida_id = ?))`);
+    args.push(like, like, like, like, q, q, q, q);
   } else if (filtro.filaDe != null) {
     // v1.11.0: perfil Atendimento vê só a própria fila (as outras pela busca)
     where.push("o.responsavel_id = ?"); args.push(filtro.filaDe);

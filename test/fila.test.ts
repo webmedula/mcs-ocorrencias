@@ -45,6 +45,16 @@ describe("fila do perfil Atendimento", () => {
     const id = (db.prepare("SELECT id FROM ocorrencias WHERE protocolo = ?").get(p) as { id: number }).id;
     db.prepare("INSERT INTO devolucoes (ocorrencia_id, status, rastreio) VALUES (?, 'em_transito', 'RASTRO123XYZ')").run(id);
     expect(await protocolos(await comoBia("/ocorrencias?q=RASTRO123"))).toEqual([p]);
+    // v1.17.0: pelos códigos do ML que vêm na etiqueta do pacote de devolução
+    const p2 = await novaOcorrencia(s.url, { pedido: "BUSCA-555" });
+    const id2 = (db.prepare("SELECT id FROM ocorrencias WHERE protocolo = ?").get(p2) as { id: number }).id;
+    db.prepare("UPDATE ocorrencias SET ml_claim_id = '5300000001' WHERE id = ?").run(id2);
+    db.prepare("INSERT INTO devolucoes (ocorrencia_id, status, envio_id, return_id) VALUES (?, 'em_transito', '44100000001', '22000000001')").run(id2);
+    for (const cod of ["44100000001", "22000000001", "5300000001"]) {
+      expect(await protocolos(await comoBia("/ocorrencias?q=" + cod)), cod).toEqual([p2]);
+      const dev = await (await comoBia("/devolucoes?q=" + cod)).json();
+      expect(dev.itens.map((i: any) => i.protocolo), "devolucoes " + cod).toEqual([p2]);
+    }
     // e abre o caso para tratar
     expect((await comoBia(`/ocorrencias/${p}`)).status).toBe(200);
   });

@@ -170,10 +170,11 @@ function filtroLista(query: express.Request["query"], ator: Ator) {
   else if (/^\d{1,9}$/.test(responsavel)) { where.push("responsavel_id = ?"); args.push(Number(responsavel)); }
   if (q) {
     const like = `%${q.replace(/[%_\\]/g, (m) => "\\" + m)}%`;
-    // v1.11.0: também pelo rastreio da devolução
+    // v1.11.0: também pelo rastreio da devolução; v1.17.0: e pelos códigos do ML que vêm na etiqueta do pacote
+    // (envio da devolução, envio de ida, devolução e reclamação)
     where.push(`(protocolo LIKE ? ESCAPE '\\' OR pedido LIKE ? ESCAPE '\\' OR nome LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'
-      OR id IN (SELECT ocorrencia_id FROM devolucoes WHERE rastreio LIKE ? ESCAPE '\\'))`);
-    args.push(like, like, like, like, like);
+      OR ml_claim_id = ? OR id IN (${BUSCA_CODIGOS_ML}))`);
+    args.push(like, like, like, like, q, like, q, q, q);
   } else if (ehEquipe(ator)) {
     // v1.11.0: o perfil Atendimento vê a própria fila; as outras ocorrências só aparecem pela busca
     where.push("responsavel_id = ?"); args.push((ator as { id: number }).id);
@@ -182,6 +183,9 @@ function filtroLista(query: express.Request["query"], ator: Ator) {
 }
 
 /** Perfil Atendimento (equipe): tela enxuta, com a própria fila e a busca. */
+/** Ocorrências cujo pacote de devolução tem esse código: rastreio (LIKE), envio da devolução, devolução ou envio de ida (exatos). */
+export const BUSCA_CODIGOS_ML = `SELECT ocorrencia_id FROM devolucoes WHERE rastreio LIKE ? ESCAPE '\\' OR envio_id = ? OR return_id = ?
+  UNION SELECT ocorrencia_id FROM conta_venda WHERE envio_ida_id = ?`;
 export const ehEquipe = (ator: Ator) => ator.tipo === "usuario" && ator.papel === "atendimento";
 
 // v1.17.0: o perfil Atendimento (funcionário das devoluções) não vê nem mexe em custos e valores da MCS
