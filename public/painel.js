@@ -345,17 +345,19 @@
     const custo = h("input", { type: "text", id: "d-custo", inputmode: "decimal", placeholder: "0,00", autocomplete: "off",
       value: o.custo_centavos != null ? (o.custo_centavos / 100).toFixed(2).replace(".", ",") : "" });
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    // v1.17.0: o perfil Atendimento escolhe o desfecho, mas não vê nem lança o custo
+    const semCustos = estado.eu?.papel === "atendimento";
     const f = h("form", { class: "acao desfecho", novalidate: true },
       h("div", { class: "campos-desfecho" },
         h("div", {}, h("label", { for: "d-desfecho" }, "Desfecho"), sel),
-        h("div", {}, h("label", { for: "d-custo" }, "Custo para a empresa ", h("span", { class: "dica" }, "(R$, opcional)")), custo)),
+        semCustos ? null : h("div", {}, h("label", { for: "d-custo" }, "Custo para a empresa ", h("span", { class: "dica" }, "(R$, opcional)")), custo)),
       msg, h("button", { type: "submit", class: "sec mini" }, "Salvar desfecho"));
     f.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const txt = custo.value.trim().replace(/\s|R\$/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
       const valor = txt === "" ? null : Number(txt);
       if (valor != null && (!Number.isFinite(valor) || valor < 0)) { msg.textContent = "Custo inválido. Use, por exemplo, 49,90."; mostrar(msg, true); return; }
-      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/desfecho`, { desfecho: sel.value || null, custo: valor });
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/desfecho`, semCustos ? { desfecho: sel.value || null } : { desfecho: sel.value || null, custo: valor });
       if (r.ok) await selecionar(o.protocolo, false);
       else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
     });
@@ -478,7 +480,7 @@
           o.status === "aguardando_liberacao" ? prazoEl({ ...o, origem: "ml" }) : null),
         h("td", { class: "col-m" }, o.rastreio || "—"),
         h("td", {}, h("span", { class: "etiqueta dev-" + o.status }, d.status[o.status] || o.status)),
-        h("td", { class: "col-m" }, o.custo != null ? reaisTxt(o.custo) : "—"));
+        h("td", { class: "col-m so-gerente" }, o.custo != null ? reaisTxt(o.custo) : "—"));
       const abrir = () => { estado.aberto = null; location.hash = encodeURIComponent(o.protocolo); abrirAba("ocorrencias"); };
       tr.addEventListener("click", abrir);
       tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
@@ -536,8 +538,8 @@
       if (r.ok) await recarregar(); else { confMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(confMsg, true); }
     });
 
-    // Custos
-    const c = d.custos;
+    // Custos (v1.17.0: o servidor manda custos = null para o perfil Atendimento, e o quadro some)
+    const c = d.custos || {};
     const campo = (id, rot, v, dica) => [h("label", { for: id }, rot, dica ? h("span", { class: "dica" }, " " + dica) : null), h("input", { type: "text", id, inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(v) })];
     const [lFrete, iFrete] = campo("dv-frete", "Frete da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
     const custoTiny = o.conta && o.conta.custoTiny != null ? o.conta.custoTiny : null;
@@ -561,7 +563,7 @@
 
     return h("div", { class: "faixa ml-info devolucao" },
       h("h3", {}, "Devolução"), h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
-      faixaLiberar, links, msgTopo, formConf, formCusto, blocoContestacao(o, recarregar));
+      faixaLiberar, links, msgTopo, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
   }
 
   function blocoContestacao(o, recarregar) {

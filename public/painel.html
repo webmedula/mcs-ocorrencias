@@ -125,7 +125,7 @@
         </div>
         <div class="tabela-rolagem">
           <table>
-            <thead><tr><th scope="col">Devolução</th><th scope="col" class="col-m">Rastreio</th><th scope="col">Status</th><th scope="col" class="col-m">Custo</th></tr></thead>
+            <thead><tr><th scope="col">Devolução</th><th scope="col" class="col-m">Rastreio</th><th scope="col">Status</th><th scope="col" class="col-m so-gerente">Custo</th></tr></thead>
             <tbody id="dv-linhas"></tbody>
           </table>
         </div>
@@ -160,7 +160,7 @@
             <label for="u-email">E-mail (é o login)</label><input type="email" id="u-email" required>
             <label for="u-senha">Senha inicial <span class="dica">(mínimo 10 caracteres)</span></label><input type="password" id="u-senha" autocomplete="new-password" required>
             <label for="u-papel">Perfil</label>
-            <select id="u-papel"><option value="atendimento">Atendimento</option><option value="gerente">Gerente (administra a equipe)</option></select>
+            <select id="u-papel"><option value="atendimento">Atendimento (sem custos e valores)</option><option value="gerente">Gerente (administra a equipe)</option></select>
             <button type="submit" class="primario">Criar usuário</button>
           </form>
         </div>
