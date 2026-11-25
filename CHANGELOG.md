@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.16.0 — 2026-11-25
+
+- **E-mail de atendimento resolvido.** Quando a equipe marca uma ocorrência do formulário como **Resolvida**, o cliente recebe na hora um e-mail ("seu atendimento foi resolvido") no mesmo padrão do de confirmação: protocolo, a solução (o desfecho registrado, menos "Sem ação (improcedente)") e o botão "Acompanhar atendimento", com o aviso de que pode responder por lá para reabrir. Se a pesquisa de satisfação estiver ligada, o e-mail avisa que ela chega em seguida.
+- Não reenvia quando o caso é reaberto e resolvido de novo sem novidade: só manda outra vez se, depois do último aviso, o cliente escreveu ou a equipe respondeu. Reclamações do Mercado Livre não recebem. O envio fica no histórico interno.
+- Nova variável opcional `AVISO_RESOLVIDA` (padrão ligado; `false` desliga). Migração automática: coluna `aviso_resolvida_em`. Teste: `test/resolvida.test.ts`.
+
 ## v1.15.0 — 2026-11-25
 
 - **Telefone obrigatório no formulário.** Quem abre uma ocorrência pelo site agora precisa informar o WhatsApp ou telefone com DDD (e o e-mail, que já era obrigatório), para a equipe conseguir entrar em contato. Aceita celular e fixo, com ou sem +55, em qualquer formato (`(11) 98765-4321`, `11987654321`, `+55 11 98765-4321`). Sem DDD, número curto ou celular sem o 9 aparece a mensagem "Informe o telefone com DDD. Ex.: (11) 98765-4321". A regra é conferida no navegador e no servidor. Reclamações importadas do Mercado Livre não mudam.

@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.15.0
+# Central de Ocorrências — v1.16.0
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.15.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.16.0** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -133,6 +133,7 @@ Reclamações do Mercado Livre mostram a foto, o título, o SKU e o link do anú
 
 - **Cliente responde pela consulta**: na página do protocolo, o cliente escreve e anexa fotos (até 15 por atendimento). A mensagem aparece no histórico do painel como "Cliente escreveu", reabre o atendimento que estava aguardando o cliente ou resolvido e avisa no Telegram e por e-mail.
 - **Desfecho e custo** de cada ocorrência (reembolso, reenvio, troca, cupom…), com gráfico e custo total na aba Números.
+- **Aviso de resolvida** (v1.16.0): ao marcar uma ocorrência do formulário como Resolvida, o cliente recebe na hora um e-mail com o protocolo, a solução (o desfecho, menos "Sem ação") e o link para acompanhar. Reaberta e resolvida de novo sem novidade não reenvia. `AVISO_RESOLVIDA=false` desliga.
 - **Pesquisa de satisfação**: algumas horas depois de resolvida, o cliente do formulário recebe um e-mail para dar nota de 1 a 5 (`/avaliar.html`). Nota 1 ou 2 avisa no Telegram. Variáveis `PESQUISA_SATISFACAO` e `PESQUISA_HORAS`.
 - **Exportar CSV** da lista com os filtros aplicados (abre no Excel).
 - **Testes automáticos** (`npm test`), rodados no GitHub antes de publicar a imagem.

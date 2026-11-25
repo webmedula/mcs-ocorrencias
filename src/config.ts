@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.15.0",
+  version: "1.16.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -55,6 +55,8 @@ export const config = {
   resumoHora: env.RESUMO_HORA === undefined || env.RESUMO_HORA === "" ? 8 : Number(env.RESUMO_HORA),
   backupManter: Math.max(1, Number(env.BACKUP_MANTER ?? 14)),
   // Pesquisa de satisfação (v1.6.0): e-mail ao cliente N horas depois de a ocorrência ser resolvida
+  // v1.16.0: e-mail ao cliente quando a ocorrência do formulário é marcada como resolvida
+  avisoResolvida: (env.AVISO_RESOLVIDA ?? "true").trim().toLowerCase() !== "false",
   pesquisaSatisfacao: (env.PESQUISA_SATISFACAO ?? "true").trim().toLowerCase() !== "false",
   pesquisaHoras: Math.max(0, Number(env.PESQUISA_HORAS ?? 2) || 0),
   publicUrl: env.PUBLIC_URL ?? "http://localhost:3000",
