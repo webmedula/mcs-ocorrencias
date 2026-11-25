@@ -1,9 +1,9 @@
-# Central de Ocorrências — v1.14.1
+# Central de Ocorrências — v1.14.2
 
 Página única de reclamações para vários canais de venda: **Mercado Livre, Shopee, TikTok Shop e loja própria**.
 O cliente registra o problema, recebe um **protocolo** por e-mail e pode acompanhar o status. Você recebe o aviso no **Telegram** com os dados do pedido vindos do **Tiny**.
 
-> Versão atual: **1.14.1** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
+> Versão atual: **1.14.2** (o histórico de mudanças está em `CHANGELOG.md` e o guia de deploy no Easypanel em `DEPLOY-EASYPANEL.md`).
 
 ## Como funciona
 
@@ -118,7 +118,7 @@ Tabelas extras: `redefinicoes`, `modelos`, `alertas_prazo`, `rotinas_estado`.
 
 ## Novidades da v1.4.0
 
-- `/privacidade.html` (política de privacidade) preenchida por `PRIVACY_*`.
+- `/privacidade.html` (política de privacidade) preenchida por `PRIVACY_*`. O CNPJ da MCS (39.501.387/0001-03) já vem por padrão; `PRIVACY_CNPJ` troca.
 - Painel: baixar dados do titular, anonimizar e excluir ocorrência; retenção automática opcional (`RETENCAO_MESES`).
 - Equipe: registro de atividades (logins, trocas de senha, exclusões) com alertas no Telegram.
 - Minha conta: aviso por e-mail de ocorrência nova e prazos.

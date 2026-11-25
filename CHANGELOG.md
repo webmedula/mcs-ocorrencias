@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.14.2 — 2026-11-25
+
+- **CNPJ na política de privacidade.** A página `/privacidade.html` passa a mostrar o CNPJ da MCS Brasil (39.501.387/0001-03) sem precisar de variável. `PRIVACY_CNPJ` com outro valor continua trocando; deixada vazia, não apaga mais o CNPJ.
+- Sem migração.
+
 ## v1.14.1 — 2026-11-19
 
 - **Saúde do produto pela data da reclamação.** `GET /saude-produtos` passa a filtrar o período pela data em que o cliente abriu a reclamação no Mercado Livre (`date_created`), não pela data em que a Central a importou. A importação do histórico em 12/10/2026 punha meses de reclamações em outubro. Cada linha traz `abertaEm`. Ocorrência do formulário segue pela data de criação.
