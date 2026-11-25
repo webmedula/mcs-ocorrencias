@@ -208,3 +208,16 @@ body:not(.modo-equipe) .so-equipe { display: none !important; }
 .cab-fila { padding: 0 0 .5rem; }
 .cab-fila h2 { margin: 0 0 .25rem; }
 .cab-fila .aviso { margin: 0; }
+
+/* v1.18.0: leitor de código de barras */
+.bipar { background: #fff; border: 2px dashed var(--laranja); border-radius: 16px; padding: 14px 16px; margin: 0 0 14px; }
+.bipar label { display: block; font-weight: 700; margin-bottom: 6px; }
+.bipar input { width: 100%; min-height: 52px; font-size: 1.15rem; border-radius: 10px; letter-spacing: .5px; }
+#bp-msg:empty { display: none; }
+#bp-msg { margin-top: 10px; }
+.bp-erro { background: #fde8e8; color: #8a1c1c; padding: 10px 14px; border-radius: 10px; font-weight: 600; }
+.bp-opcoes { display: flex; flex-direction: column; gap: 6px; }
+.bp-opcoes button { text-align: left; }
+.conf-rapida { border: 2px solid var(--laranja); border-radius: 14px; padding: 12px 14px; margin: 8px 0; background: #fff8f3; }
+.conf-rapida .botoes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.conf-rapida .botoes button { min-height: 48px; flex: 1 1 160px; font-size: 1rem; }

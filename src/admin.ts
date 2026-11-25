@@ -509,6 +509,46 @@ const erroDev = (res: express.Response, e: unknown) => {
 };
 
 // Fila da equipe: todas as devoluções, as que pedem ação primeiro. O Gerente IA também lê.
+// ---------- Leitor de código de barras (v1.18.0) ----------
+/**
+ * Códigos candidatos a partir do que o leitor digitou. O leitor USB "digita" o código e dá Enter.
+ * Na etiqueta do Mercado Livre há um código de barras (número do envio) e um QR que traz um JSON
+ * como {"id":"44123456789","t":"lm"}; com teclado em outro layout as aspas viram outros caracteres,
+ * por isso também vale qualquer sequência de 8 ou mais dígitos.
+ */
+export function codigosDoBipe(bruto: string): string[] {
+  const t = bruto.trim().slice(0, 300);
+  const out = new Set<string>();
+  const limpo = t.replace(/\s+/g, "");
+  if (limpo) out.add(limpo.toUpperCase());
+  for (const m of t.matchAll(/\d{8,}/g)) out.add(m[0]);
+  return [...out].slice(0, 10);
+}
+
+admin.get("/bipar", (req, res) => {
+  const codigos = codigosDoBipe(String(req.query.codigo ?? ""));
+  if (!codigos.length) return res.status(400).json({ erro: "Bipe a etiqueta do pacote." });
+  const marcas = codigos.map(() => "?").join(",");
+  // Busca exata (não por trecho): um bipe precisa achar o caso certo, não parecidos
+  const itens = db
+    .prepare(
+      `SELECT o.protocolo, o.nome, o.pedido, o.origem, o.status, d.status AS devolucao, d.conferencia, o.produto_json
+       FROM ocorrencias o LEFT JOIN devolucoes d ON d.ocorrencia_id = o.id
+       WHERE o.anonimizada = 0 AND (
+         UPPER(o.protocolo) IN (${marcas}) OR o.pedido IN (${marcas}) OR o.ml_claim_id IN (${marcas})
+         OR d.envio_id IN (${marcas}) OR d.return_id IN (${marcas}) OR UPPER(d.rastreio) IN (${marcas})
+         OR o.id IN (SELECT ocorrencia_id FROM conta_venda WHERE envio_ida_id IN (${marcas})))
+       ORDER BY (d.id IS NULL), o.criado_em DESC LIMIT 10`,
+    )
+    .all(...Array(7).fill(codigos).flat())
+    .map((r: any) => {
+      const { produto_json, ...resto } = r;
+      const p = produtosDe(produto_json)[0];
+      return { ...resto, produto: p ? { foto: p.foto, titulo: p.titulo } : null };
+    });
+  res.json({ codigos, itens });
+});
+
 admin.get("/devolucoes", (req, res) => {
   const pagina = Math.max(1, Number(req.query.pagina) || 1);
   const equipe = ehEquipe(req.ator!);

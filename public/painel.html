@@ -115,6 +115,11 @@
     <section id="v-devolucoes" class="oculto">
       <div class="cab-num"><h1 class="menor">Devoluções</h1></div>
       <p class="aviso">Devoluções do Mercado Livre acompanhadas pela Central. As que pedem ação aparecem primeiro. Clique para abrir, conferir o produto, lançar custos ou contestar.</p>
+      <form id="bipar" class="bipar" novalidate autocomplete="off">
+        <label for="bp-codigo">Bipar pacote</label>
+        <input type="text" id="bp-codigo" autocomplete="off" spellcheck="false" placeholder="Aponte o leitor para a etiqueta do Mercado Livre (ou digite o código e Enter)">
+        <div id="bp-msg" role="status" aria-live="assertive"></div>
+      </form>
       <div class="kpis" id="dv-kpis"></div>
       <section class="lista card-lista" aria-label="Lista de devoluções">
         <div class="filtros">
