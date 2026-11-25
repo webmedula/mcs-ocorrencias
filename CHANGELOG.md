@@ -1,9 +1,12 @@
 # Changelog
 
+## v1.18.1 — 2026-11-25
+
+- **O bipe só abre o caso.** Saem os botões de conferência rápida da v1.18.0: bipou, o caso abre direto no quadro da devolução (destacado em laranja) e a conferência continua no formulário de sempre. Nada é gravado por bipar.
+
 ## v1.18.0 — 2026-11-25
 
 - **Leitor de código de barras nas devoluções.** A aba Devoluções ganha o campo **Bipar pacote**, já com o cursor nele ao abrir a aba. É só apontar o leitor USB para a etiqueta do Mercado Livre: o leitor digita o código e dá Enter, e a Central abre o caso direto na devolução, com bip de confirmação. Aceita o código de barras (número do envio da devolução), o QR da etiqueta (inclusive com o teclado em outro layout), o rastreio, o número da devolução, da reclamação, do pedido ou o protocolo. A busca é exata, para não abrir um caso parecido. Código desconhecido: bip grave e aviso em vermelho, com o código selecionado para bipar de novo. Mais de um caso com o mesmo código: lista para escolher.
-- O bipe só abre o caso (destacando o quadro da devolução); a conferência continua sendo feita no formulário de sempre. Nada é gravado por bipar.
 - Funciona para os dois perfis. Nova rota `GET /api/admin/bipar?codigo=…`. Sem migração. Teste: `test/bipar.test.ts`.
 
 ## v1.17.0 — 2026-11-25
