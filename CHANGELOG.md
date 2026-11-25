@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.15.0 — 2026-11-25
+
+- **Telefone obrigatório no formulário.** Quem abre uma ocorrência pelo site agora precisa informar o WhatsApp ou telefone com DDD (e o e-mail, que já era obrigatório), para a equipe conseguir entrar em contato. Aceita celular e fixo, com ou sem +55, em qualquer formato (`(11) 98765-4321`, `11987654321`, `+55 11 98765-4321`). Sem DDD, número curto ou celular sem o 9 aparece a mensagem "Informe o telefone com DDD. Ex.: (11) 98765-4321". A regra é conferida no navegador e no servidor. Reclamações importadas do Mercado Livre não mudam.
+- **CNPJ na política de privacidade.** A página `/privacidade.html` passa a mostrar o CNPJ da MCS Brasil (39.501.387/0001-03) sem precisar de variável. `PRIVACY_CNPJ` com outro valor continua trocando; deixada vazia, não apaga mais o CNPJ.
+- Sem migração. Testes: `test/telefone.test.ts`, `test/privacidade.test.ts`.
+
 ## v1.14.1 — 2026-11-19
 
 - **Saúde do produto pela data da reclamação.** `GET /saude-produtos` passa a filtrar o período pela data em que o cliente abriu a reclamação no Mercado Livre (`date_created`), não pela data em que a Central a importou. A importação do histórico em 12/10/2026 punha meses de reclamações em outubro. Cada linha traz `abertaEm`. Ocorrência do formulário segue pela data de criação.

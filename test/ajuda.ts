@@ -42,7 +42,7 @@ export async function novaOcorrencia(url: string, extra: Record<string, string> 
   const f = new FormData();
   const campos = {
     canal: "shopee", pedido: "PED-123", tipo: "defeito", descricao: "O produto chegou quebrado na caixa.",
-    nome: "Cliente Teste", email: "cliente@teste.local", telefone: "", consentimento: "true", ...extra,
+    nome: "Cliente Teste", email: "cliente@teste.local", telefone: "(11) 98765-4321", consentimento: "true", ...extra,
   };
   for (const [k, v] of Object.entries(campos)) f.append(k, v);
   const r = await fetch(url + "/api/ocorrencias", { method: "POST", body: f });
