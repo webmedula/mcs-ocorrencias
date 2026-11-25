@@ -64,6 +64,16 @@
   }
 
   // ----- Validação local (a do servidor é a que vale) -----
+  // Telefone com DDD: 10 dígitos (fixo) ou 11 (celular com 9), com ou sem +55 — igual ao servidor
+  function telefoneOk(t) {
+    if (!/^[\d\s()+\-.]+$/.test(t.trim())) return false;
+    let d = t.replace(/\D/g, "");
+    if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
+    if (d.startsWith("0")) d = d.slice(1);
+    if (d.length !== 10 && d.length !== 11) return false;
+    if (!/^[1-9][1-9]/.test(d)) return false;
+    return d.length === 10 || d[2] === "9";
+  }
   function validar() {
     const v = Object.fromEntries(new FormData(form));
     const e = {};
@@ -73,6 +83,7 @@
     if (!v.descricao || v.descricao.trim().length < 10) e.descricao = "Descreva o problema com mais detalhes.";
     if (!v.nome || v.nome.trim().length < 2) e.nome = "Informe seu nome.";
     if (!/^\S+@\S+\.\S+$/.test(v.email || "")) e.email = "Informe um e-mail válido.";
+    if (!telefoneOk(v.telefone || "")) e.telefone = "Informe o telefone com DDD. Ex.: (11) 98765-4321";
     if (!v.consentimento) e.consentimento = "É necessário aceitar o uso dos dados.";
     return e;
   }

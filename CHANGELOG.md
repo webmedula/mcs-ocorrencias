@@ -1,9 +1,10 @@
 # Changelog
 
-## v1.14.2 — 2026-11-25
+## v1.15.0 — 2026-11-25
 
+- **Telefone obrigatório no formulário.** Quem abre uma ocorrência pelo site agora precisa informar o WhatsApp ou telefone com DDD (e o e-mail, que já era obrigatório), para a equipe conseguir entrar em contato. Aceita celular e fixo, com ou sem +55, em qualquer formato (`(11) 98765-4321`, `11987654321`, `+55 11 98765-4321`). Sem DDD, número curto ou celular sem o 9 aparece a mensagem "Informe o telefone com DDD. Ex.: (11) 98765-4321". A regra é conferida no navegador e no servidor. Reclamações importadas do Mercado Livre não mudam.
 - **CNPJ na política de privacidade.** A página `/privacidade.html` passa a mostrar o CNPJ da MCS Brasil (39.501.387/0001-03) sem precisar de variável. `PRIVACY_CNPJ` com outro valor continua trocando; deixada vazia, não apaga mais o CNPJ.
-- Sem migração.
+- Sem migração. Testes: `test/telefone.test.ts`, `test/privacidade.test.ts`.
 
 ## v1.14.1 — 2026-11-19
 

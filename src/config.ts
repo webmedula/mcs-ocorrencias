@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.14.2",
+  version: "1.15.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -13,7 +13,7 @@ export const config = {
   // Política de privacidade: se PRIVACY_URL ficar vazio, usa a página /privacidade.html desta própria Central
   privacyUrl: env.PRIVACY_URL?.trim() || `${env.PUBLIC_URL ?? "http://localhost:3000"}/privacidade.html`,
   privacyControlador: env.PRIVACY_CONTROLADOR ?? "",
-  // CNPJ da MCS Brasil por padrão (v1.14.2); PRIVACY_CNPJ com valor troca, e vazio não apaga mais o CNPJ
+  // CNPJ da MCS Brasil por padrão (v1.15.0); PRIVACY_CNPJ com valor troca, e vazio não apaga mais o CNPJ
   privacyCnpj: env.PRIVACY_CNPJ?.trim() || "39.501.387/0001-03",
   privacyContato: env.PRIVACY_CONTATO ?? env.SUPPORT_EMAIL ?? "",
   // 0 = não apaga sozinho. Acima de 0: anonimiza ocorrências resolvidas há mais de N meses

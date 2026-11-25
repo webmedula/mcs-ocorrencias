@@ -82,6 +82,18 @@ z.setErrorMap((issue, ctx) => {
   return { message: ctx.defaultError };
 });
 
+const MSG_TELEFONE = "Informe o telefone com DDD. Ex.: (11) 98765-4321";
+/** Telefone brasileiro com DDD: 10 dígitos (fixo) ou 11 (celular, começa com 9), com ou sem +55. */
+export function telefoneValido(valor: string): boolean {
+  if (!/^[\d\s()+\-.]+$/.test(valor)) return false;
+  let d = valor.replace(/\D/g, "");
+  if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
+  if (d.startsWith("0")) d = d.slice(1); // 0 de longa distância: (011) …
+  if (d.length !== 10 && d.length !== 11) return false;
+  if (!/^[1-9][1-9]/.test(d)) return false; // DDD 11 a 99
+  return d.length === 10 || d[2] === "9";
+}
+
 const schema = z.object({
   canal: z.enum(canais),
   pedido: z.string().trim().min(3, "Informe o número do pedido").max(60).regex(/^[\w\-./ ]+$/, "Número do pedido inválido"),
@@ -89,7 +101,8 @@ const schema = z.object({
   descricao: z.string().trim().min(10, "Descreva o problema com mais detalhes").max(3000),
   nome: z.string().trim().min(2, "Informe seu nome").max(120),
   email: z.string().trim().toLowerCase().email("E-mail inválido").max(160),
-  telefone: z.string().trim().max(30).regex(/^[\d\s()+\-]*$/, "Telefone inválido").optional().or(z.literal("")),
+  // v1.15.0: telefone obrigatório, com DDD (fixo ou celular/WhatsApp; aceita +55 na frente)
+  telefone: z.string({ required_error: MSG_TELEFONE }).trim().max(30).refine(telefoneValido, MSG_TELEFONE),
   consentimento: z.literal("true", { errorMap: () => ({ message: "É necessário aceitar o uso dos dados" }) }),
 });
 
