@@ -10,7 +10,7 @@ import {
   conferirSenha, criarSessao, encerrarSessao, exigirLogin, gastarTempo, gerarChave, hashSenha,
   identificar, nomeDoAtor, senhaForte, soGerente, soGerenteOuIA, soPessoas, type Ator,
 } from "./auth.js";
-import { avisarPessoaEmail, enviarRedefinicao, enviarResposta } from "./notify.js";
+import { avisarPessoaEmail, enviarRedefinicao, enviarResolvida, enviarResposta } from "./notify.js";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -297,8 +297,42 @@ admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
       o.id, `Status atualizado: ${STATUS[p.data.status]}.`, nomeDoAtor(req.ator!),
     );
   })();
+  if (p.data.status === "resolvida") void avisarResolvida(o.id);
   res.json({ status: p.data.status });
 });
+
+/**
+ * E-mail "seu atendimento foi resolvido" (v1.16.0), só para ocorrências do formulário.
+ * Não reenvia quando o caso é reaberto e resolvido de novo sem novidade: só manda outra vez se, depois do
+ * último aviso, o cliente escreveu ou a equipe respondeu publicamente.
+ */
+export async function avisarResolvida(id: number): Promise<boolean> {
+  if (!config.avisoResolvida) return false;
+  const o = db
+    .prepare("SELECT id, protocolo, nome, email, origem, anonimizada, status, desfecho, aviso_resolvida_em FROM ocorrencias WHERE id = ?")
+    .get(id) as any | undefined;
+  if (!o || o.origem !== "formulario" || o.anonimizada || o.status !== "resolvida" || !o.email) return false;
+  if (o.aviso_resolvida_em) {
+    const novidade = db
+      .prepare(
+        `SELECT 1 FROM eventos WHERE ocorrencia_id = ? AND publico = 1 AND criado_em > ?
+           AND (do_cliente = 1 OR (autor IS NOT NULL AND texto NOT LIKE 'Status atualizado:%')) LIMIT 1`,
+      )
+      .get(o.id, o.aviso_resolvida_em);
+    if (!novidade) return false;
+  }
+  // Desfecho como "solução", menos o improcedente (soaria mal para o cliente)
+  const solucao = o.desfecho && o.desfecho !== "sem_acao" ? DESFECHOS[o.desfecho as Desfecho] ?? null : null;
+  try {
+    if (!(await enviarResolvida(o, solucao))) return false;
+  } catch (e: any) {
+    console.error(`[mail] FALHA ao avisar resolvida ${o.protocolo}:`, e?.message);
+    return false;
+  }
+  db.prepare("UPDATE ocorrencias SET aviso_resolvida_em = datetime('now') WHERE id = ?").run(o.id);
+  db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?, 'Cliente avisado por e-mail de que o atendimento foi resolvido.', 0, 'Sistema')").run(o.id);
+  return true;
+}
 
 // Desfecho e custo da resolução (v1.6.0). Pessoas e Gerente IA.
 const desfechoKeys = Object.keys(DESFECHOS) as [Desfecho, ...Desfecho[]];

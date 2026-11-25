@@ -329,3 +329,7 @@ const colunasFat = (db.prepare("PRAGMA table_info(ml_faturamento)").all() as { n
 if (!colunasFat.includes("debitado")) db.exec("ALTER TABLE ml_faturamento ADD COLUMN debitado INTEGER");
 if (!colunasConta.includes("envio_ida_id")) db.exec("ALTER TABLE conta_venda ADD COLUMN envio_ida_id TEXT");
 db.exec("CREATE INDEX IF NOT EXISTS idx_fat_envio ON ml_faturamento(envio_id)");
+
+// v1.16.0: quando o cliente foi avisado por e-mail de que a ocorrência foi resolvida
+const colunasOc116 = (db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasOc116.includes("aviso_resolvida_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN aviso_resolvida_em TEXT");

@@ -193,6 +193,39 @@ export async function enviarResposta(o: { protocolo: string; nome: string; email
   return info.accepted.length > 0;
 }
 
+/** Aviso ao cliente de que a ocorrência foi resolvida (v1.16.0). Lança em caso de falha. */
+export async function enviarResolvida(o: { protocolo: string; nome: string; email: string }, solucao: string | null): Promise<boolean> {
+  const t = getTransporter();
+  if (!t) {
+    console.log(`[mail] SMTP não configurado; aviso de resolvida de ${o.protocolo} NÃO enviado.`);
+    return false;
+  }
+  const link = `${config.publicUrl}/consulta.html?protocolo=${encodeURIComponent(o.protocolo)}`;
+  const html = `
+  <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#1b1f23">
+    <h2 style="margin-bottom:4px">${esc(config.brandName)}</h2>
+    <p>Olá, ${esc(o.nome)}. O seu atendimento foi <b>resolvido</b>.</p>
+    <p style="font-size:13px;color:#555;margin:0">Seu protocolo</p>
+    <p style="font-size:24px;font-weight:bold;letter-spacing:1px;margin:4px 0 16px">${esc(o.protocolo)}</p>
+    ${solucao ? `<p><b>Solução:</b> ${esc(solucao)}</p>` : ""}
+    <p>Se ainda precisar de algo, é só responder pelo botão abaixo (informe o e-mail usado no registro): o atendimento é reaberto e a nossa equipe volta a analisar.</p>
+    <p><a href="${esc(link)}" style="background:#c73e00;color:#fff;padding:12px 18px;border-radius:10px;font-weight:bold;text-decoration:none">Acompanhar atendimento</a></p>
+    ${config.pesquisaSatisfacao ? `<p style="font-size:12px;color:#777">Em breve você vai receber uma pesquisa rápida sobre o atendimento. Sua opinião ajuda muito.</p>` : ""}
+  </div>`;
+  const envelopeFrom = config.smtpUser.includes("@") ? config.smtpUser : enderecoDe(config.mailFrom);
+  const info = await t.sendMail({
+    from: config.mailFrom,
+    ...(config.supportEmail.includes("@") ? { replyTo: config.supportEmail } : {}),
+    envelope: { from: envelopeFrom, to: o.email },
+    to: o.email,
+    subject: `Protocolo ${o.protocolo} — seu atendimento foi resolvido`,
+    html,
+    text: `O seu atendimento ${o.protocolo} foi resolvido.${solucao ? ` Solução: ${solucao}.` : ""} Se ainda precisar de algo, responda em: ${link}`,
+  });
+  console.log(`[mail] resolvida ${o.protocolo} para ${o.email} · aceitos=${JSON.stringify(info.accepted)}`);
+  return info.accepted.length > 0;
+}
+
 /** Pesquisa de satisfação: cinco botões, cada um abre /avaliar.html já com a nota. Lança em caso de falha. */
 export async function enviarPesquisa(o: { protocolo: string; nome: string; email: string }, link: string): Promise<void> {
   const t = getTransporter();
