@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.19.0 — 2026-11-26
+
+- **Tela do caso reorganizada.** Nova ordem: cabeçalho (protocolo, status, canal, pedido, assunto, comprador e data), **produto do pedido e pedido no Tiny**, depois as **ações juntas num quadro** (status, fila e desfecho), a reclamação do ML com a conversa logo abaixo, a devolução, e a **Conta da venda recolhida** (o resumo já mostra o resultado para a MCS; clique para abrir). Descrição, fotos, pesquisa, nota interna, resposta, histórico e LGPD ficam no fim.
+- **Motivo do ML em português** (ex.: `repentant_buyer` vira "Arrependimento do comprador"). Códigos desconhecidos aparecem sem os sublinhados.
+- Só tela. Sem migração.
+
 ## v1.18.1 — 2026-11-25
 
 - **O bipe só abre o caso.** Saem os botões de conferência rápida da v1.18.0: bipou, o caso abre direto no quadro da devolução (destacado em laranja) e a conferência continua no formulário de sempre. Nada é gravado por bipar.
