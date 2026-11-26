@@ -8,7 +8,7 @@
     diferente: "Voltou um produto diferente", sem_produto: "A caixa veio sem o produto", outro: "Outro problema",
   };
   // v1.20.0: como voltou cada unidade do pedido (itens do Tiny)
-  const ESTADO_UNIDADE = { ok: "Voltou em bom estado", defeito: "Voltou com defeito ou danificada", nao_voltou: "Não voltou", nao_devolvida: "Não fazia parte da devolução" };
+  const ESTADO_UNIDADE = { ok: "Voltou em bom estado", defeito: "Voltou com defeito ou danificada", nao_voltou: "Não voltou" };
   // Motivos de contestação do ML (SRF2..SRF7); "conf" liga com o resultado da conferência
   const MOTIVOS_CONTESTACAO = [
     { id: "SRF2", nome: "O produto chegou danificado", foto: true, conf: "danificado" },
@@ -421,9 +421,10 @@
   function escolhaDevolucao(o) {
     const d = o.devolucao;
     const unidades = d.unidades;
-    const escolhida = unidades.some((u) => u.estado === "nao_devolvida");
-    const caixas = unidades.map((u, i) => h("input", { type: "checkbox", id: `it-un-${i}`, "data-chave": u.chave, checked: escolhida ? u.estado !== "nao_devolvida" : false }));
+    // v1.20.2: "devolvida" marca o item escolhido ainda sem conferência (antes, marcar todos não gravava nada)
+    const caixas = unidades.map((u, i) => h("input", { type: "checkbox", id: `it-un-${i}`, "data-chave": u.chave, checked: !!u.estado && u.estado !== "nao_devolvida" }));
     const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    if (estado.msgItens) { msg.textContent = estado.msgItens; mostrar(msg, true); estado.msgItens = ""; }
     const kits = [...new Set(unidades.map((u) => u.kit).filter(Boolean))];
     const f = h("form", { class: "itens-tiny escolha", novalidate: true },
       h("p", { class: "aviso" }, h("strong", {}, "No Tiny"), kits.length ? ` (kit ${kits.join(", ")} aberto nas unidades)` : "", ". Marque o que voltou na devolução:"),
@@ -436,10 +437,10 @@
       const atual = Object.fromEntries(unidades.map((u) => [u.chave, u.estado]));
       const corpo = Object.fromEntries(caixas.map((c) => {
         const k = c.dataset.chave;
-        return [k, !c.checked ? "nao_devolvida" : atual[k] === "nao_devolvida" ? null : atual[k] || null];
+        return [k, !c.checked ? "nao_devolvida" : atual[k] && atual[k] !== "nao_devolvida" ? atual[k] : "devolvida"];
       }));
       const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { unidades: corpo });
-      if (r.ok) { estado.bipado = o.protocolo; await selecionar(o.protocolo, false); }
+      if (r.ok) { estado.bipado = o.protocolo; estado.msgItens = "Itens da devolução salvos."; await selecionar(o.protocolo, false); }
       else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
     });
     return f;
@@ -592,12 +593,12 @@
     const todas = d.unidades || [];
     const fora = todas.filter((u) => u.estado === "nao_devolvida");
     const unidades = todas.filter((u) => u.estado !== "nao_devolvida");
-    const { nao_devolvida: _nd, ...estadosConf } = ESTADO_UNIDADE;
-    const selUnid = unidades.map((u, i) => h("select", { id: `dv-un-${i}`, "data-chave": u.chave }, h("option", { value: "" }, "Ainda não conferida"),
-      Object.entries(estadosConf).map(([k, v]) => h("option", { value: k, selected: k === u.estado }, v))));
+    const escolhida = todas.some((u) => u.estado === "nao_devolvida" || u.estado === "devolvida");
+    const selUnid = unidades.map((u, i) => h("select", { id: `dv-un-${i}`, "data-chave": u.chave }, h("option", { value: escolhida ? "devolvida" : "" }, "Ainda não conferida"),
+      Object.entries(ESTADO_UNIDADE).map(([k, v]) => h("option", { value: k, selected: k === u.estado }, v))));
     const blocoUnid = temUnidades(d)
-      ? h("fieldset", { class: "unidades" }, h("legend", {}, fora.length ? "Itens da devolução" : "Como voltou cada unidade"),
-          fora.length ? null : h("p", { class: "aviso" }, "Dica: marque no quadro Produto do pedido quais itens voltaram, e só eles aparecem aqui."),
+      ? h("fieldset", { class: "unidades" }, h("legend", {}, escolhida ? "Itens da devolução" : "Como voltou cada unidade"),
+          escolhida ? null : h("p", { class: "aviso" }, "Dica: marque no quadro Produto do pedido quais itens voltaram, e só eles aparecem aqui."),
           unidades.map((u, i) => h("div", { class: "unidade" },
             h("label", { for: `dv-un-${i}` }, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
               typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null), selUnid[i])),

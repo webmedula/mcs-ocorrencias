@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.20.2 — 2026-11-26
+
+- **Correção: "Salvar itens da devolução" não gravava quando todos os itens estavam marcados.** O item escolhido ainda sem conferência agora fica gravado como "faz parte da devolução, a conferir", e as caixas continuam marcadas depois de salvar, com o aviso "Itens da devolução salvos".
+- Escolher os itens não mexe mais no "Produto perdido": ele só é calculado depois de conferir alguma unidade.
+
 ## v1.20.1 — 2026-11-26
 
 - **Escolher o item da devolução no quadro do produto.** Nos casos com devolução, a lista "No Tiny" do quadro Produto do pedido ganha uma caixa em cada unidade: marque o que voltou e clique em "Salvar itens da devolução". A conferência passa a mostrar só esses itens para dizer se voltaram em bom estado, com defeito ou não voltaram; os outros ficam como "fora da devolução" e não entram no produto perdido.
