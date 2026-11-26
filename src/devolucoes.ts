@@ -340,7 +340,7 @@ export function atualizarDevolucao(ocId: number, e: EdicaoDevolucao, autor: stri
   const mudou = (k: keyof EdicaoDevolucao) => e[k] !== undefined;
 
   let conferencia = d.conferencia as string | null;
-  if (mudou("conferencia")) {
+  if (mudou("conferencia") && (e.conferencia ?? null) !== (d.conferencia ?? null)) {
     conferencia = e.conferencia ?? null;
     sets.push("conferencia = ?", "conferida_por = ?", "conferida_em = ?");
     args.push(conferencia, conferencia ? autor : null, conferencia ? new Date().toISOString().slice(0, 19).replace("T", " ") : null);

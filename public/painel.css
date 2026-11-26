@@ -233,3 +233,7 @@ fieldset.unidades { border: 1px solid var(--borda); border-radius: 12px; padding
 fieldset.unidades legend { font-weight: 600; font-size: .9rem; padding: 0 4px; }
 fieldset.unidades .unidade { margin-top: 8px; }
 fieldset.unidades .unidade small { color: var(--suave); font-weight: 400; }
+/* v1.20.1: escolha dos itens da devolução no quadro do produto */
+.itens-tiny.escolha label.caixa { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-weight: 400; cursor: pointer; }
+.itens-tiny.escolha label.caixa input { width: auto; min-height: 0; margin-top: 3px; }
+.itens-tiny.escolha button { margin-top: 6px; }
