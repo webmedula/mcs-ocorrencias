@@ -3,7 +3,6 @@
 ## v1.21.0 — 2026-11-26
 
 - **Caso com devolução em duas abas.** A aba **Conferência** tem só o que o funcionário usa ao abrir o pacote, nesta ordem: produto do pedido com a escolha dos itens que voltaram (itens do Tiny), pedido no Tiny, conferência por unidade, resumo/motivo/observações e **Custos desta venda** (etiqueta da devolução, custo do produto perdido, outros custos, recuperado com o ML, com o custo da devolução e o resultado da venda logo abaixo). O perfil Atendimento não vê os custos. A aba **Detalhes do caso** tem o resto: status, fila e desfecho, reclamação e conversa do ML, situação da devolução e contestação, Conta da venda, descrição, notas, histórico e LGPD. Casos sem devolução seguem como antes.
-- **Peças iguais em quantidade viram uma linha só.** Acima de 5 peças iguais (ex.: kit de 1000 abraçadeiras), a conferência mostra um lote "× 1000 un." com uma marcação para todas, e o custo do produto perdido é o custo unitário × quantidade. Até 5 peças, cada uma segue separada (dá para marcar 1 de 2).
 
 ## v1.20.2 — 2026-11-26
 

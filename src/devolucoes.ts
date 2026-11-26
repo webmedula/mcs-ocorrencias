@@ -230,11 +230,8 @@ async function avisar(oc: { protocolo: string; pedido: string; nome: string }, s
 }
 
 // ---------- Unidades do pedido no Tiny (v1.20.0) ----------
-/** `qtd` > 1 quando muitas peças iguais viram uma linha só (v1.21.0): o estado vale para todas e o custo é unitário × qtd. */
-export interface Unidade { chave: string; sku: string | null; titulo: string | null; kit: string | null; custo: number | null; qtd: number }
+export interface Unidade { chave: string; sku: string | null; titulo: string | null; kit: string | null; custo: number | null }
 const MAX_UNIDADES = 30;
-/** Até esta quantidade, cada peça é uma unidade (dá para marcar 1 de 2); acima, vira um lote (ex.: kit de 1000 abraçadeiras). */
-const MAX_SEPARADAS = 5;
 
 /** Uma linha por unidade física do pedido, pelos itens do Tiny (kits abertos nos componentes). Lê o que a rotina de custo gravou. */
 export function unidadesDoPedido(ocId: number): Unidade[] {
@@ -244,19 +241,12 @@ export function unidadesDoPedido(ocId: number): Unidade[] {
   const out: Unidade[] = [];
   const vistas = new Map<string, number>();
   const somar = (sku: string | null, titulo: string | null, kit: string | null, qtd: number, custo: number | null) => {
-    const n = Math.max(1, Math.round(qtd) || 1);
-    const base = (sku || titulo || "item").slice(0, 60);
-    if (n > MAX_SEPARADAS) {
-      if (out.length >= MAX_UNIDADES) return;
-      const k = (vistas.get(base + "#lote") ?? 0) + 1;
-      vistas.set(base + "#lote", k);
-      out.push({ chave: `${base}#lote${k > 1 ? k : ""}`, sku, titulo, kit, custo, qtd: n });
-      return;
-    }
+    const n = Math.max(1, Math.min(MAX_UNIDADES, Math.round(qtd) || 1));
     for (let i = 0; i < n && out.length < MAX_UNIDADES; i++) {
+      const base = (sku || titulo || "item").slice(0, 60);
       const k = (vistas.get(base) ?? 0) + 1;
       vistas.set(base, k);
-      out.push({ chave: `${base}#${k}`, sku, titulo, kit, custo, qtd: 1 });
+      out.push({ chave: `${base}#${k}`, sku, titulo, kit, custo });
     }
   };
   for (const it of Array.isArray(itens) ? itens : []) {
@@ -277,7 +267,7 @@ export function perdaPelasUnidades(unidades: Unidade[], estados: Record<string, 
   for (const u of unidades) {
     if (!UNIDADE_COM_PERDA.has(estados[u.chave] ?? "")) continue;
     if (u.custo == null) return null;
-    total += Math.round(u.custo * 100) * (u.qtd || 1);
+    total += Math.round(u.custo * 100);
   }
   return total;
 }

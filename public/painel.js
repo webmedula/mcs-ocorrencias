@@ -446,10 +446,8 @@
   const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
   // v1.20.0: o pedido como está no Tiny (uma venda do ML pode ser um kit com várias unidades)
   // v1.20.1: com devolução, cada unidade ganha a caixa "voltou na devolução"; a conferência segue só com as marcadas
-  // v1.21.0: peças iguais em quantidade viram um lote ("× 1000 un."), com o custo por unidade
   const rotuloUnidade = (u) => [u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
-    u.qtd > 1 ? h("strong", {}, ` × ${u.qtd} un.`) : null,
-    typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}${u.qtd > 1 ? "/un." : ""}`) : null];
+    typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null];
   const temUnidades = (d) => !!d && Array.isArray(d.unidades) && (d.unidades.length > 1 || d.unidades.some((u) => u.kit));
   function escolhaDevolucao(o) {
     const d = o.devolucao;

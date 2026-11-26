@@ -129,7 +129,7 @@ describe("devolução por unidade (v1.20.0)", async () => {
       { sku: "LE", titulo: "Lanterna lado esquerdo", qtd: 2, unitario: 26.6 },
       { sku: "LD", titulo: "Lanterna lado direito", qtd: 1, unitario: 12.18 },
     ]);
-    expect(unidadesDoPedido(o.id).map((u) => [u.chave, u.kit, u.custo, u.qtd])).toEqual([["LE#1", "KIT", 26.6, 1], ["LE#2", "KIT", 26.6, 1], ["LD#1", "KIT", 12.18, 1]]);
+    expect(unidadesDoPedido(o.id).map((u) => [u.chave, u.kit, u.custo])).toEqual([["LE#1", "KIT", 26.6], ["LE#2", "KIT", 26.6], ["LD#1", "KIT", 12.18]]);
   });
 
   it("o custo das unidades com defeito ou que não voltaram vira o produto perdido, e entra na conta", async () => {
@@ -160,16 +160,6 @@ describe("devolução por unidade (v1.20.0)", async () => {
     const d = atualizarDevolucao(o.id, { unidades: { "LE#1": "devolvida", "LE#2": "devolvida", "LD#1": "devolvida" } }, "Ana");
     expect(d.unidades.map((u: any) => u.estado)).toEqual(["devolvida", "devolvida", "devolvida"]);
     expect(d.custos.perda).toBeNull();
-  });
-
-  it("muitas peças iguais viram um lote só, e o custo é unitário × quantidade (v1.21.0)", async () => {
-    const o = ocMl("2000888", "7002");
-    db.prepare("UPDATE conta_venda SET custo_tiny_json = ? WHERE ocorrencia_id = ?").run(JSON.stringify([
-      { sku: "ABR-1000", titulo: "1000 abraçadeiras", qtd: 1, unitario: 29, total: 29, componentes: [{ sku: "ABR", titulo: "Abraçadeira", qtd: 1000, unitario: 0.02 }] },
-    ]), o.id);
-    db.prepare("INSERT INTO devolucoes (ocorrencia_id, status, ml_status) VALUES (?, 'recebida', 'delivered')").run(o.id);
-    expect(unidadesDoPedido(o.id)).toEqual([{ chave: "ABR#lote", sku: "ABR", titulo: "Abraçadeira", kit: "ABR-1000", custo: 0.02, qtd: 1000 }]);
-    expect(atualizarDevolucao(o.id, { unidades: { "ABR#lote": "defeito" } }, "Ana").custos.perda).toBe(20);
   });
 
   it("o perfil Atendimento vê as unidades sem o custo", async () => {
