@@ -6,10 +6,10 @@ const fetchReal = globalThis.fetch;
 const json = (retorno: unknown) => new Response(JSON.stringify({ retorno }), { headers: { "content-type": "application/json" } });
 const PRODUTOS: Record<string, any> = {
   // Produto simples com preço de custo e custo médio
-  "21": { id: "21", classe_produto: "S", preco_custo: "26.60", preco_custo_medio: "25.00" },
+  "21": { id: "21", codigo: "LE", nome: "Lanterna lado esquerdo", classe_produto: "S", preco_custo: "26.60", preco_custo_medio: "25.00" },
   // Variação sem custo: usa o do pai (30)
   "31": { id: "31", classe_produto: "V", idProdutoPai: "30", preco_custo: "0" },
-  "30": { id: "30", classe_produto: "V", preco_custo: "12.18" },
+  "30": { id: "30", codigo: "LD", nome: "Lanterna lado direito", classe_produto: "V", preco_custo: "12.18" },
   // Kit: 2 × produto 21 + 1 × produto 30
   "40": { id: "40", classe_produto: "K", preco_custo: "0", kit: [{ item: { id_produto: "21", quantidade: "2" } }, { item: { id_produto: "30", quantidade: "1" } }] },
   // Sem custo nenhum
@@ -110,5 +110,56 @@ describe("custo do produto pelo Tiny", () => {
     const r = await s.painel("POST", `/ocorrencias/${o.protocolo}/custo-tiny`);
     expect(r.status).toBe(200);
     expect((await r.json()).custoTiny).toBe(65.38);
+  });
+});
+
+describe("devolução por unidade (v1.20.0)", async () => {
+  const { unidadesDoPedido, atualizarDevolucao, devolucaoDa } = await import("../src/devolucoes.js");
+  const { devolucaoParaEquipe } = await import("../src/admin.js");
+  const comDevolucao = async () => {
+    const o = ocMl("2000777", "7002");
+    await atualizarCustoTiny(o.id);
+    db.prepare("INSERT INTO devolucoes (ocorrencia_id, status, ml_status) VALUES (?, 'recebida', 'delivered')").run(o.id);
+    return o;
+  };
+
+  it("abre o kit do Tiny em unidades, com o custo de cada uma", async () => {
+    const o = await comDevolucao();
+    expect(contaDa(o.id).custoTinyItens[0].componentes).toEqual([
+      { sku: "LE", titulo: "Lanterna lado esquerdo", qtd: 2, unitario: 26.6 },
+      { sku: "LD", titulo: "Lanterna lado direito", qtd: 1, unitario: 12.18 },
+    ]);
+    expect(unidadesDoPedido(o.id).map((u) => [u.chave, u.kit, u.custo])).toEqual([["LE#1", "KIT", 26.6], ["LE#2", "KIT", 26.6], ["LD#1", "KIT", 12.18]]);
+  });
+
+  it("o custo das unidades com defeito ou que não voltaram vira o produto perdido, e entra na conta", async () => {
+    const o = await comDevolucao();
+    let d = atualizarDevolucao(o.id, { unidades: { "LE#1": "defeito", "LE#2": "nao_devolvida", "LD#1": "ok", "XX#9": "defeito" } }, "Ana");
+    expect(d.custos).toMatchObject({ perda: 26.6, perdaOrigem: "unidades" });
+    expect(d.unidades.map((u: any) => u.estado)).toEqual(["defeito", "nao_devolvida", "ok"]);
+    expect(contaDa(o.id)).toMatchObject({ custoConta: 26.6, custoNota: "lançado na devolução" });
+    d = atualizarDevolucao(o.id, { unidades: { "LE#1": "defeito", "LD#1": "nao_voltou" } }, "Ana");
+    expect(d.custos.perda).toBe(38.78);
+    const ev = db.prepare("SELECT texto FROM eventos WHERE ocorrencia_id = ? ORDER BY id DESC").get(o.id) as { texto: string };
+    expect(ev.texto).toMatch(/LD: não voltou/);
+    // tudo em bom estado zera a perda
+    d = atualizarDevolucao(o.id, { unidades: { "LE#1": "ok", "LE#2": "ok", "LD#1": "ok" } }, "Ana");
+    expect(d.custos).toMatchObject({ perda: 0, perdaOrigem: "unidades" });
+  });
+
+  it("o valor digitado vale mais que o calculado; salvar o mesmo valor não muda a origem", async () => {
+    const o = await comDevolucao();
+    atualizarDevolucao(o.id, { unidades: { "LE#1": "defeito" } }, "Ana");
+    expect(atualizarDevolucao(o.id, { perda: 26.6, frete: 10 }, "Ana").custos.perdaOrigem).toBe("unidades");
+    expect(atualizarDevolucao(o.id, { perda: 15 }, "Ana").custos).toMatchObject({ perda: 15, perdaOrigem: "manual" });
+    expect(atualizarDevolucao(o.id, { unidades: { "LE#1": "defeito", "LD#1": "defeito" } }, "Ana").custos.perda).toBe(15);
+  });
+
+  it("o perfil Atendimento vê as unidades sem o custo", async () => {
+    const o = await comDevolucao();
+    const d = devolucaoParaEquipe(devolucaoDa(o.id));
+    expect(d.custos).toBeNull();
+    expect(d.unidades[0]).not.toHaveProperty("custo");
+    expect(d.unidades[0]).toMatchObject({ chave: "LE#1", sku: "LE" });
   });
 });

@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.19.0",
+  version: "1.20.0",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -141,6 +141,17 @@ export const CONFERENCIAS = {
   sem_produto: "A caixa veio sem o produto",
   outro: "Outro problema",
 } as const;
+
+// v1.20.0: como voltou cada unidade do pedido (itens do Tiny, kits abertos nos componentes)
+export const ESTADOS_UNIDADE = {
+  ok: "Voltou em bom estado",
+  defeito: "Voltou com defeito ou danificada",
+  nao_voltou: "Não voltou",
+  nao_devolvida: "Não fazia parte da devolução",
+} as const;
+export type EstadoUnidade = keyof typeof ESTADOS_UNIDADE;
+/** Unidades cujo custo entra como produto perdido. */
+export const UNIDADE_COM_PERDA = new Set<string>(["defeito", "nao_voltou"]);
 
 export type StatusDevolucao = keyof typeof STATUS_DEVOLUCAO;
 export type Conferencia = keyof typeof CONFERENCIAS;

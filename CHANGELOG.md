@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.20.0 — 2026-11-26
+
+- **O pedido como está no Tiny.** Nos casos do Mercado Livre, o quadro Produto do pedido mostra também os itens do pedido no Tiny, e abre os kits nas unidades (ex.: a venda de uma lanterna no ML que no Tiny é o par, lado esquerdo e lado direito). O gerente vê o custo de cada unidade; o perfil Atendimento não.
+- **Conferência da devolução por unidade.** Cada unidade ganha a própria marcação: voltou em bom estado, voltou com defeito, não voltou ou não fazia parte da devolução. Dá para registrar a devolução de só um item da venda. A mudança fica no histórico.
+- **Produto perdido calculado pelas unidades.** O custo do Tiny das unidades com defeito ou que não voltaram entra sozinho em "Produto perdido" e, por ele, na Conta da venda. O valor digitado à mão continua valendo mais.
+- Migração: colunas `devolucoes.itens_json` e `perda_origem` (perda já lançada fica como digitada). Os pedidos com devolução em aberto são relidos no Tiny para trazer os componentes dos kits.
+- Correção: salvar a conferência sem mexer no motivo real não grava mais "Motivo real removido".
+
 ## v1.19.0 — 2026-11-26
 
 - **Tela do caso reorganizada.** Nova ordem: cabeçalho (protocolo, status, canal, pedido, assunto, comprador e data), **produto do pedido e pedido no Tiny**, depois as **ações juntas num quadro** (status, fila e desfecho), a reclamação do ML com a conversa logo abaixo, a devolução, e a **Conta da venda recolhida** (o resumo já mostra o resultado para a MCS; clique para abrir). Descrição, fotos, pesquisa, nota interna, resposta, histórico e LGPD ficam no fim.

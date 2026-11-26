@@ -7,6 +7,8 @@
     ok: "Voltou em bom estado", danificado: "Voltou danificado", incompleto: "Voltou incompleto",
     diferente: "Voltou um produto diferente", sem_produto: "A caixa veio sem o produto", outro: "Outro problema",
   };
+  // v1.20.0: como voltou cada unidade do pedido (itens do Tiny)
+  const ESTADO_UNIDADE = { ok: "Voltou em bom estado", defeito: "Voltou com defeito ou danificada", nao_voltou: "Não voltou", nao_devolvida: "Não fazia parte da devolução" };
   // Motivos de contestação do ML (SRF2..SRF7); "conf" liga com o resultado da conferência
   const MOTIVOS_CONTESTACAO = [
     { id: "SRF2", nome: "O produto chegou danificado", foto: true, conf: "danificado" },
@@ -413,8 +415,22 @@
   }
 
   const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
+  // v1.20.0: o pedido como está no Tiny (uma venda do ML pode ser um kit com várias unidades)
+  function blocoItensTiny(o) {
+    const itens = o.origem === "ml" ? o.itensTiny || [] : [];
+    if (!itens.length) return null;
+    const custo = (v) => (typeof v === "number" ? ` · custo ${reaisTxt(v)}` : "");
+    const linha = (x, sufixo) => h("li", {}, x.sku ? h("b", {}, x.sku + " ") : null, x.titulo || "Item", h("small", {}, ` · ${x.qtd} un.${custo(x.unitario)}${sufixo || ""}`));
+    return h("div", { class: "itens-tiny" },
+      h("p", { class: "aviso" }, h("strong", {}, "No Tiny"), itens.some((i) => i.componentes) ? " (kit aberto nas unidades):" : ":"),
+      h("ul", {}, itens.map((i) => i.componentes
+        ? h("li", {}, i.sku ? h("b", {}, i.sku + " ") : null, i.titulo || "Kit", h("small", {}, ` · ${i.qtd} kit${i.qtd > 1 ? "s" : ""}`),
+            h("ul", {}, i.componentes.map((c) => linha(c))))
+        : linha(i))));
+  }
+
   function blocoProdutos(o) {
-    if (!o.produtos || !o.produtos.length) return null;
+    if (!o.produtos || !o.produtos.length) return blocoItensTiny(o) ? h("div", { class: "produtos" }, h("h3", {}, "Produto do pedido"), blocoItensTiny(o)) : null;
     return h("div", { class: "produtos" }, h("h3", {}, o.produtos.length > 1 ? "Produtos do pedido" : "Produto do pedido"),
       o.produtos.map((p) => {
         const url = p.foto ? "/api/admin/produto-img/" + p.foto : null;
@@ -424,7 +440,7 @@
             h("img", { src: url, alt: p.titulo ? `Foto do produto: ${p.titulo}` : "Foto do produto", width: "96", height: "96", loading: "lazy" })) : h("div", { class: "sem-foto", "aria-hidden": "true" }, "sem foto"),
           h("div", {}, h("strong", {}, p.titulo || "Produto"), det ? h("small", {}, det) : null,
             p.permalink ? h("a", { href: p.permalink, target: "_blank", rel: "noopener" }, "Ver anúncio no Mercado Livre") : null));
-      }));
+      }), blocoItensTiny(o));
   }
 
   function formMl(o) {
@@ -541,16 +557,33 @@
     const motivoReal = h("input", { type: "text", id: "dv-motivo", maxlength: "200", placeholder: "Ex.: arrependimento, defeito, produto errado", value: d.motivoReal || "" });
     const confObs = h("textarea", { id: "dv-obs", rows: "2", maxlength: "1000", placeholder: "Estado da caixa e do produto, o que faltou, etc." }, d.conferenciaObs || "");
     const confMsg = h("p", { class: "msg-ok oculto", role: "status" });
+    // v1.20.0: uma marcação por unidade do pedido no Tiny
+    const unidades = d.unidades || [];
+    const selUnid = unidades.map((u, i) => {
+      const sel = h("select", { id: `dv-un-${i}`, "data-chave": u.chave }, h("option", { value: "" }, "Ainda não conferida"),
+        Object.entries(ESTADO_UNIDADE).map(([k, v]) => h("option", { value: k, selected: k === u.estado }, v)));
+      return sel;
+    });
+    const blocoUnid = unidades.length > 1 || unidades.some((u) => u.kit)
+      ? h("fieldset", { class: "unidades" }, h("legend", {}, "Como voltou cada unidade ", h("span", { class: "dica" }, "(pelos itens do Tiny)")),
+          unidades.map((u, i) => h("div", { class: "unidade" },
+            h("label", { for: `dv-un-${i}` }, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
+              typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null), selUnid[i])),
+          d.custos ? h("p", { class: "aviso" }, "O custo das unidades com defeito ou que não voltaram entra sozinho em Produto perdido.") : null)
+      : null;
     const formConf = h("form", { class: "acao", novalidate: true },
       h("h3", {}, "Conferência do produto"),
       d.conferidaPor ? h("p", { class: "aviso" }, `Conferido por ${d.conferidaPor} em ${fmt(d.conferidaEm)}.`) : null,
-      h("label", { for: "dv-conf" }, "Como o produto voltou"), confSel,
+      blocoUnid,
+      h("label", { for: "dv-conf" }, blocoUnid ? "Resumo da devolução" : "Como o produto voltou"), confSel,
       h("label", { for: "dv-motivo" }, "Motivo real da devolução ", h("span", { class: "dica" }, "(para os números)")), motivoReal,
       h("label", { for: "dv-obs" }, "Observações"), confObs, confMsg,
       h("button", { type: "submit", class: "sec mini" }, "Salvar conferência"));
     formConf.addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { conferencia: confSel.value || null, conferenciaObs: confObs.value, motivoReal: motivoReal.value });
+      const corpo = { conferencia: confSel.value || null, conferenciaObs: confObs.value, motivoReal: motivoReal.value };
+      if (blocoUnid) corpo.unidades = Object.fromEntries(selUnid.map((sel) => [sel.dataset.chave, sel.value || null]));
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, corpo);
       if (r.ok) await recarregar(); else { confMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(confMsg, true); }
     });
 
@@ -559,7 +592,8 @@
     const campo = (id, rot, v, dica) => [h("label", { for: id }, rot, dica ? h("span", { class: "dica" }, " " + dica) : null), h("input", { type: "text", id, inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(v) })];
     const [lFrete, iFrete] = campo("dv-frete", "Frete da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
     const custoTiny = o.conta && o.conta.custoTiny != null ? o.conta.custoTiny : null;
-    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda, custoTiny != null ? `(custo no Tiny: ${reaisTxt(custoTiny)})` : "");
+    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda,
+      c.perdaOrigem === "unidades" ? "(calculado pelas unidades conferidas; pode mudar)" : custoTiny != null ? `(custo do pedido no Tiny: ${reaisTxt(custoTiny)})` : "");
     const [lOutros, iOutros] = campo("dv-outros", "Outros custos (R$)", c.outros);
     const [lReemb, iReemb] = campo("dv-reemb", "Valor reembolsado ao comprador (R$)", c.reembolso, c.reembolsoOrigem === "estimado" ? "(estimado pelo valor dos produtos; informativo, não entra no custo)" : "(informativo, não entra no custo)");
     const [lRec, iRec] = campo("dv-rec", "Recuperado com o Mercado Livre (R$)", c.recuperado, "(desconta do custo)");

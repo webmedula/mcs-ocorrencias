@@ -2,7 +2,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { z } from "zod";
-import { CANAIS, CONFERENCIAS, DESFECHOS, STATUS, STATUS_DEVOLUCAO, TIPOS, config, type Conferencia, type Desfecho, type Status } from "./config.js";
+import { CANAIS, CONFERENCIAS, DESFECHOS, ESTADOS_UNIDADE, STATUS, STATUS_DEVOLUCAO, TIPOS, config, type Conferencia, type Desfecho, type Status } from "./config.js";
 import { dataLocal, gerarCsv, reais } from "./csv.js";
 import { pastaProdutos } from "./produtos.js";
 import { db } from "./db.js";
@@ -199,8 +199,8 @@ const ocultarValores = (texto: string) => texto.replace(/R\$\s?-?[\d.]*\d(,\d{1,
 /** Devolução sem o quadro de custos, para o perfil Atendimento. */
 export function devolucaoParaEquipe<T extends { custos?: unknown } | null>(d: T): T {
   if (!d) return d;
-  const { custos: _c, ...resto } = d as any;
-  return { ...resto, custos: null } as T;
+  const { custos: _c, unidades, ...resto } = d as any;
+  return { ...resto, custos: null, unidades: Array.isArray(unidades) ? unidades.map(({ custo: _u, ...u }: any) => u) : unidades } as T;
 }
 
 admin.get("/ocorrencias", (req, res) => {
@@ -297,13 +297,21 @@ admin.get("/ocorrencias/:protocolo", (req, res) => {
       .all(o.id);
     ml = { claim, mensagens, destinatario: claim?.stage === "dispute" ? "mediator" : "complainant", encerrada: claim?.status === "closed" };
   }
+  // v1.20.0: itens do pedido no Tiny (kits com os componentes), lidos pela rotina de custo
+  let itensTiny: any[] = [];
+  try {
+    const ct = db.prepare("SELECT custo_tiny_json FROM conta_venda WHERE ocorrencia_id = ?").get(o.id) as { custo_tiny_json: string | null } | undefined;
+    itensTiny = ct?.custo_tiny_json ? JSON.parse(ct.custo_tiny_json) : [];
+  } catch { /* ignora */ }
   if (ehEquipe(req.ator!)) {
+    itensTiny = itensTiny.map(({ unitario: _u, total: _t, origem: _o, componentes, ...i }: any) =>
+      ({ ...i, ...(componentes ? { componentes: componentes.map(({ unitario: _cu, ...c }: any) => c) } : {}) }));
     const { custo_centavos: _custo, ...semCusto } = resto;
     const evs = (eventos as { texto: string; do_cliente: number }[]).map((e) => (e.do_cliente ? e : { ...e, texto: ocultarValores(e.texto) }));
-    return res.json({ ...semCusto, custo_centavos: null, tiny, anexos, eventos: evs, ml, produtos: produtosDe(pj), pesquisa, responsavel,
+    return res.json({ ...semCusto, custo_centavos: null, tiny, itensTiny, anexos, eventos: evs, ml, produtos: produtosDe(pj), pesquisa, responsavel,
       devolucao: devolucaoParaEquipe(devolucaoDa(o.id)), conta: null });
   }
-  res.json({ ...resto, tiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" ? contaDa(o.id) : null });
+  res.json({ ...resto, tiny, itensTiny, anexos, eventos, ml, produtos: produtosDe(pj), pesquisa, responsavel, devolucao: devolucaoDa(o.id), conta: o.origem === "ml" ? contaDa(o.id) : null });
 });
 
 admin.patch("/ocorrencias/:protocolo/status", (req, res) => {
@@ -582,6 +590,8 @@ admin.patch("/ocorrencias/:protocolo/devolucao", soPessoas, (req, res) => {
       motivoReal: z.string().trim().max(200).nullable().optional(),
       frete: valor, perda: valor, outros: valor, reembolso: valor, recuperado: valor,
       contestacaoResultado: z.enum(["ganha", "perdida"]).nullable().optional(),
+      unidades: z.record(z.string().max(80), z.enum(Object.keys(ESTADOS_UNIDADE) as [keyof typeof ESTADOS_UNIDADE, ...(keyof typeof ESTADOS_UNIDADE)[]]).nullable())
+        .refine((r) => Object.keys(r).length <= 40, "Unidades demais.").optional(),
     })
     .safeParse(req.body);
   if (!p.success) return invalido(res, p.error);
