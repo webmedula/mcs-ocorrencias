@@ -295,19 +295,21 @@
       ehMl
         ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
         : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
-      ...(ehMl ? [blocoMl(o)] : []),
-      blocoConta(o),
-      blocoDevolucao(o),
+      // v1.19.0: produto e Tiny no topo, ações juntas, depois ML, devolução e a conta (recolhida)
       blocoProdutos(o),
       tiny,
+      h("div", { class: "acoes-caso" },
+        h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
+        blocoResponsavel(o),
+        blocoDesfecho(o)),
+      ...(ehMl ? [blocoMl(o), o.anonimizada ? null : formMl(o)] : []),
+      blocoDevolucao(o),
+      blocoConta(o),
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
-      h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
-      blocoResponsavel(o),
-      blocoDesfecho(o),
       blocoPesquisa(o),
       o.anonimizada ? h("p", { class: "faixa neutro" }, "Dados pessoais removidos: não é possível responder o cliente.") : null,
-      formNota, o.anonimizada ? null : ehMl ? formMl(o) : formResp,
+      formNota, o.anonimizada || ehMl ? null : formResp,
       h("h3", {}, "Histórico"), hist, lgpd,
     ];
     box.append(...partes.flat(Infinity).filter((x) => x != null && x !== false));
@@ -380,11 +382,25 @@
   const TIPO_CLAIM = { mediations: "Mediação", returns: "Devolução", cancel_purchase: "Cancelamento", fulfillment: "Fulfillment" };
   const ACAO = { send_message_to_complainant: "Responder o comprador", send_message_to_mediator: "Responder o mediador", refund: "Reembolsar", allow_return: "Autorizar devolução" };
 
+  // v1.19.0: o ML devolve o motivo como código em inglês (ex.: repentant_buyer)
+  const MOTIVOS_ML = {
+    repentant_buyer: "Arrependimento do comprador", buyer_regrets: "Arrependimento do comprador", regret: "Arrependimento do comprador",
+    not_working: "Produto não funciona", not_working_item: "Produto não funciona", defective: "Produto com defeito", defective_item: "Produto com defeito",
+    broken: "Produto quebrado", broken_item: "Produto quebrado", damaged: "Produto danificado", damaged_item: "Produto danificado",
+    different: "Produto diferente do anunciado", different_item: "Produto diferente do anunciado", not_as_described: "Produto diferente do anunciado",
+    different_size: "Tamanho diferente", wrong_size: "Tamanho errado", wrong_item: "Produto errado", wrong_product: "Produto errado",
+    incomplete: "Produto incompleto", incomplete_item: "Produto incompleto", missing_parts: "Faltam peças ou acessórios",
+    not_delivered: "Produto não entregue", not_received: "Produto não recebido", didnt_receive: "Produto não recebido", undelivered: "Produto não entregue",
+    delayed: "Entrega atrasada", late_delivery: "Entrega atrasada", counterfeit: "Produto falsificado", used_item: "Produto usado",
+    expired: "Produto vencido", wrong_quantity: "Quantidade errada", other: "Outro motivo",
+  };
+  const motivoMl = (m) => (!m ? m : MOTIVOS_ML[String(m).toLowerCase()] || (/^[a-z]+(_[a-z]+)+$/.test(m) ? m.replace(/_/g, " ") : m));
+
   function blocoMl(o) {
     const c = o.ml.claim || {};
     const linhas = [
       ["Reclamação", c.id], ["Tipo", TIPO_CLAIM[c.type] || c.type], ["Etapa", c.stage === "dispute" ? "Em disputa (mediação do ML)" : c.stage === "claim" ? "Reclamação (você pode resolver)" : c.stage],
-      ["Motivo", c.motivo || c.reason_id], ["Situação", c.status === "closed" ? "Encerrada" : "Aberta"],
+      ["Motivo", motivoMl(c.motivo || c.reason_id)], ["Situação", c.status === "closed" ? "Encerrada" : "Aberta"],
       ["Prazo", o.prazo_em ? fmt(o.prazo_em) : null],
     ].filter((x) => x[1]);
     const acoes = (c.acoes || []).map((a) => ACAO[a.action] || a.action);
@@ -742,7 +758,10 @@
           h("ul", {}, c.lancamentos.map((l) => h("li", {}, `${l.data ? fmt(l.data) : "—"} · ${l.descricao}${l.debitado === true ? " (descontado do pagamento)" : l.debitado === false ? " (cobrado à parte)" : ""} · `, h("b", { class: l.valor < 0 ? "pos" : "neg" }, sinal(-l.valor))))))
       : null;
     const pendFaixa = c.pendencia === "aguardando" ? h("div", { class: "faixa aviso-f" }, `Aguardando retorno do Mercado Livre${c.pendenciaEm ? ` desde ${fmt(c.pendenciaEm)}` : ""}${c.pendenciaObs ? ` · ${c.pendenciaObs}` : ""}`) : null;
-    return h("div", { class: "faixa ml-info conta" }, h("h3", {}, "Conta da venda"), faixaErro, semDados, faixaDesfeita, dl, total, h("p", { class: "aviso" }, btAt, msgAt),
+    // v1.19.0: recolhida por padrão; o resumo já mostra o resultado
+    return h("details", { class: "faixa ml-info conta" },
+      h("summary", {}, h("strong", {}, "Conta da venda"), c.resultado != null ? h("span", { class: c.resultado < 0 ? "neg" : "pos" }, ` · Resultado para a MCS: ${sinal(c.resultado)}`) : null, h("span", { class: "dica" }, " (clique para abrir)")),
+      faixaErro, semDados, faixaDesfeita, dl, total, h("p", { class: "aviso" }, btAt, msgAt),
       dinheiro ? h("p", { class: "aviso" }, dinheiro) : null, reput, pendFaixa, blocoTiny, lanc, f);
   }
 

@@ -219,3 +219,8 @@ body:not(.modo-equipe) .so-equipe { display: none !important; }
 .bp-opcoes { display: flex; flex-direction: column; gap: 6px; }
 .bp-opcoes button { text-align: left; }
 .devolucao.bipado { box-shadow: 0 0 0 3px var(--laranja); }
+/* v1.19.0: ações do caso juntas e conta da venda recolhida */
+.acoes-caso { border: 1px solid var(--borda); border-radius: 12px; padding: 4px 14px 14px; margin: 14px 0 12px; }
+details.faixa.conta { display: block; }
+details.faixa.conta > summary { cursor: pointer; list-style: revert; }
+details.faixa.conta[open] > summary { margin-bottom: 10px; }

@@ -1,4 +1,4 @@
-# API do Gerente IA — Central de Ocorrências v1.18.1
+# API do Gerente IA — Central de Ocorrências v1.19.0
 
 Documento para configurar o serviço **mcs-gerente** (ou qualquer automação) para consultar a Central.
 
