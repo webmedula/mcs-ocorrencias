@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.20.1 — 2026-11-26
+
+- **Escolher o item da devolução no quadro do produto.** Nos casos com devolução, a lista "No Tiny" do quadro Produto do pedido ganha uma caixa em cada unidade: marque o que voltou e clique em "Salvar itens da devolução". A conferência passa a mostrar só esses itens para dizer se voltaram em bom estado, com defeito ou não voltaram; os outros ficam como "fora da devolução" e não entram no produto perdido.
+- Correção: salvar a conferência sem mudar o resumo não grava mais "Conferência removida" no histórico.
+
 ## v1.20.0 — 2026-11-26
 
 - **O pedido como está no Tiny.** Nos casos do Mercado Livre, o quadro Produto do pedido mostra também os itens do pedido no Tiny, e abre os kits nas unidades (ex.: a venda de uma lanterna no ML que no Tiny é o par, lado esquerdo e lado direito). O gerente vê o custo de cada unidade; o perfil Atendimento não.

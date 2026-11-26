@@ -416,7 +416,37 @@
 
   const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
   // v1.20.0: o pedido como está no Tiny (uma venda do ML pode ser um kit com várias unidades)
+  // v1.20.1: com devolução, cada unidade ganha a caixa "voltou na devolução"; a conferência segue só com as marcadas
+  const temUnidades = (d) => !!d && Array.isArray(d.unidades) && (d.unidades.length > 1 || d.unidades.some((u) => u.kit));
+  function escolhaDevolucao(o) {
+    const d = o.devolucao;
+    const unidades = d.unidades;
+    const escolhida = unidades.some((u) => u.estado === "nao_devolvida");
+    const caixas = unidades.map((u, i) => h("input", { type: "checkbox", id: `it-un-${i}`, "data-chave": u.chave, checked: escolhida ? u.estado !== "nao_devolvida" : false }));
+    const msg = h("p", { class: "msg-ok oculto", role: "status" });
+    const kits = [...new Set(unidades.map((u) => u.kit).filter(Boolean))];
+    const f = h("form", { class: "itens-tiny escolha", novalidate: true },
+      h("p", { class: "aviso" }, h("strong", {}, "No Tiny"), kits.length ? ` (kit ${kits.join(", ")} aberto nas unidades)` : "", ". Marque o que voltou na devolução:"),
+      unidades.map((u, i) => h("label", { class: "caixa", for: `it-un-${i}` }, caixas[i],
+        h("span", {}, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item", typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null))),
+      msg, h("button", { type: "submit", class: "sec mini" }, "Salvar itens da devolução"));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!caixas.some((c) => c.checked)) { msg.textContent = "Marque pelo menos um item."; mostrar(msg, true); return; }
+      const atual = Object.fromEntries(unidades.map((u) => [u.chave, u.estado]));
+      const corpo = Object.fromEntries(caixas.map((c) => {
+        const k = c.dataset.chave;
+        return [k, !c.checked ? "nao_devolvida" : atual[k] === "nao_devolvida" ? null : atual[k] || null];
+      }));
+      const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, { unidades: corpo });
+      if (r.ok) { estado.bipado = o.protocolo; await selecionar(o.protocolo, false); }
+      else { msg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(msg, true); }
+    });
+    return f;
+  }
+
   function blocoItensTiny(o) {
+    if (o.origem === "ml" && temUnidades(o.devolucao)) return escolhaDevolucao(o);
     const itens = o.origem === "ml" ? o.itensTiny || [] : [];
     if (!itens.length) return null;
     const custo = (v) => (typeof v === "number" ? ` · custo ${reaisTxt(v)}` : "");
@@ -558,17 +588,20 @@
     const confObs = h("textarea", { id: "dv-obs", rows: "2", maxlength: "1000", placeholder: "Estado da caixa e do produto, o que faltou, etc." }, d.conferenciaObs || "");
     const confMsg = h("p", { class: "msg-ok oculto", role: "status" });
     // v1.20.0: uma marcação por unidade do pedido no Tiny
-    const unidades = d.unidades || [];
-    const selUnid = unidades.map((u, i) => {
-      const sel = h("select", { id: `dv-un-${i}`, "data-chave": u.chave }, h("option", { value: "" }, "Ainda não conferida"),
-        Object.entries(ESTADO_UNIDADE).map(([k, v]) => h("option", { value: k, selected: k === u.estado }, v)));
-      return sel;
-    });
-    const blocoUnid = unidades.length > 1 || unidades.some((u) => u.kit)
-      ? h("fieldset", { class: "unidades" }, h("legend", {}, "Como voltou cada unidade ", h("span", { class: "dica" }, "(pelos itens do Tiny)")),
+    // v1.20.1: só as unidades marcadas como "voltou na devolução" no quadro Produto do pedido
+    const todas = d.unidades || [];
+    const fora = todas.filter((u) => u.estado === "nao_devolvida");
+    const unidades = todas.filter((u) => u.estado !== "nao_devolvida");
+    const { nao_devolvida: _nd, ...estadosConf } = ESTADO_UNIDADE;
+    const selUnid = unidades.map((u, i) => h("select", { id: `dv-un-${i}`, "data-chave": u.chave }, h("option", { value: "" }, "Ainda não conferida"),
+      Object.entries(estadosConf).map(([k, v]) => h("option", { value: k, selected: k === u.estado }, v))));
+    const blocoUnid = temUnidades(d)
+      ? h("fieldset", { class: "unidades" }, h("legend", {}, fora.length ? "Itens da devolução" : "Como voltou cada unidade"),
+          fora.length ? null : h("p", { class: "aviso" }, "Dica: marque no quadro Produto do pedido quais itens voltaram, e só eles aparecem aqui."),
           unidades.map((u, i) => h("div", { class: "unidade" },
             h("label", { for: `dv-un-${i}` }, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
               typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null), selUnid[i])),
+          fora.length ? h("p", { class: "aviso" }, `Fora da devolução: ${fora.map((u) => u.sku || u.titulo || "item").join(", ")}.`) : null,
           d.custos ? h("p", { class: "aviso" }, "O custo das unidades com defeito ou que não voltaram entra sozinho em Produto perdido.") : null)
       : null;
     const formConf = h("form", { class: "acao", novalidate: true },
@@ -582,7 +615,7 @@
     formConf.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const corpo = { conferencia: confSel.value || null, conferenciaObs: confObs.value, motivoReal: motivoReal.value };
-      if (blocoUnid) corpo.unidades = Object.fromEntries(selUnid.map((sel) => [sel.dataset.chave, sel.value || null]));
+      if (blocoUnid) corpo.unidades = Object.fromEntries([...fora.map((u) => [u.chave, "nao_devolvida"]), ...selUnid.map((sel) => [sel.dataset.chave, sel.value || null])]);
       const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, corpo);
       if (r.ok) await recarregar(); else { confMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(confMsg, true); }
     });
