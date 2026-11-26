@@ -333,3 +333,15 @@ db.exec("CREATE INDEX IF NOT EXISTS idx_fat_envio ON ml_faturamento(envio_id)");
 // v1.16.0: quando o cliente foi avisado por e-mail de que a ocorrência foi resolvida
 const colunasOc116 = (db.prepare("PRAGMA table_info(ocorrencias)").all() as { name: string }[]).map((c) => c.name);
 if (!colunasOc116.includes("aviso_resolvida_em")) db.exec("ALTER TABLE ocorrencias ADD COLUMN aviso_resolvida_em TEXT");
+
+// v1.20.0: conferência da devolução por unidade do pedido no Tiny, e de onde veio o "produto perdido"
+const colunasDev120 = (db.prepare("PRAGMA table_info(devolucoes)").all() as { name: string }[]).map((c) => c.name);
+if (!colunasDev120.includes("itens_json")) db.exec("ALTER TABLE devolucoes ADD COLUMN itens_json TEXT");
+if (!colunasDev120.includes("perda_origem")) {
+  db.exec("ALTER TABLE devolucoes ADD COLUMN perda_origem TEXT");
+  // O que a equipe já digitou continua valendo
+  db.exec("UPDATE devolucoes SET perda_origem = 'manual' WHERE perda_centavos IS NOT NULL");
+  // Relê no Tiny os pedidos com devolução ainda aberta, para trazer os componentes dos kits
+  db.exec(`UPDATE conta_venda SET custo_tiny_em = NULL WHERE ocorrencia_id IN
+    (SELECT ocorrencia_id FROM devolucoes WHERE status NOT IN ('encerrada','cancelada'))`);
+}

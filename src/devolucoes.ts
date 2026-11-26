@@ -1,4 +1,4 @@
-import { CONFERENCIAS, STATUS_DEVOLUCAO, config, type Conferencia, type StatusDevolucao } from "./config.js";
+import { CONFERENCIAS, ESTADOS_UNIDADE, STATUS_DEVOLUCAO, UNIDADE_COM_PERDA, config, type Conferencia, type EstadoUnidade, type StatusDevolucao } from "./config.js";
 import { db } from "./db.js";
 import { MlErro, ml } from "./ml-api.js";
 import { enviarTelegram, esc } from "./notify.js";
@@ -229,6 +229,49 @@ async function avisar(oc: { protocolo: string; pedido: string; nome: string }, s
   );
 }
 
+// ---------- Unidades do pedido no Tiny (v1.20.0) ----------
+export interface Unidade { chave: string; sku: string | null; titulo: string | null; kit: string | null; custo: number | null }
+const MAX_UNIDADES = 30;
+
+/** Uma linha por unidade física do pedido, pelos itens do Tiny (kits abertos nos componentes). Lê o que a rotina de custo gravou. */
+export function unidadesDoPedido(ocId: number): Unidade[] {
+  const r = db.prepare("SELECT custo_tiny_json FROM conta_venda WHERE ocorrencia_id = ?").get(ocId) as { custo_tiny_json: string | null } | undefined;
+  let itens: any[] = [];
+  try { itens = r?.custo_tiny_json ? JSON.parse(r.custo_tiny_json) : []; } catch { return []; }
+  const out: Unidade[] = [];
+  const vistas = new Map<string, number>();
+  const somar = (sku: string | null, titulo: string | null, kit: string | null, qtd: number, custo: number | null) => {
+    const n = Math.max(1, Math.min(MAX_UNIDADES, Math.round(qtd) || 1));
+    for (let i = 0; i < n && out.length < MAX_UNIDADES; i++) {
+      const base = (sku || titulo || "item").slice(0, 60);
+      const k = (vistas.get(base) ?? 0) + 1;
+      vistas.set(base, k);
+      out.push({ chave: `${base}#${k}`, sku, titulo, kit, custo });
+    }
+  };
+  for (const it of Array.isArray(itens) ? itens : []) {
+    const comps = Array.isArray(it?.componentes) ? it.componentes : [];
+    if (comps.length) for (const c of comps) somar(c.sku ?? null, c.titulo ?? null, it.sku ?? it.titulo ?? null, Number(c.qtd) || 1, typeof c.unitario === "number" ? c.unitario : null);
+    else somar(it?.sku ?? null, it?.titulo ?? null, null, Number(it?.qtd) || 1, typeof it?.unitario === "number" ? it.unitario : null);
+  }
+  return out;
+}
+
+function estadosDe(json: string | null): Record<string, EstadoUnidade> {
+  try { const v = json ? JSON.parse(json) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; }
+}
+
+/** Custo, em centavos, das unidades que voltaram com defeito ou não voltaram. null se alguma delas está sem custo no Tiny. */
+export function perdaPelasUnidades(unidades: Unidade[], estados: Record<string, string>): number | null {
+  let total = 0;
+  for (const u of unidades) {
+    if (!UNIDADE_COM_PERDA.has(estados[u.chave] ?? "")) continue;
+    if (u.custo == null) return null;
+    total += Math.round(u.custo * 100);
+  }
+  return total;
+}
+
 // ---------- Apresentação ----------
 export function devolucaoDa(ocId: number): any | null {
   const d = db.prepare("SELECT * FROM devolucoes WHERE ocorrencia_id = ?").get(ocId) as any | undefined;
@@ -253,9 +296,10 @@ export function devolucaoDa(ocId: number): any | null {
     conferenciaObs: d.conferencia_obs,
     conferidaPor: d.conferida_por,
     conferidaEm: d.conferida_em,
+    unidades: (() => { const est = estadosDe(d.itens_json); return unidadesDoPedido(ocId).map((u) => ({ ...u, estado: est[u.chave] ?? null })); })(),
     custos: {
       frete: reais(d.frete_centavos), freteOrigem: d.frete_origem,
-      perda: reais(d.perda_centavos), outros: reais(d.outros_centavos),
+      perda: reais(d.perda_centavos), perdaOrigem: d.perda_origem, outros: reais(d.outros_centavos),
       reembolso: reais(d.reembolso_centavos), reembolsoOrigem: d.reembolso_origem,
       recuperado: reais(d.recuperado_centavos),
       total: temCusto ? total / 100 : null,
@@ -282,6 +326,8 @@ export interface EdicaoDevolucao {
   reembolso?: number | null;
   recuperado?: number | null;
   contestacaoResultado?: "ganha" | "perdida" | null;
+  /** v1.20.0: estado de cada unidade, pela chave de unidadesDoPedido; null limpa */
+  unidades?: Record<string, EstadoUnidade | null>;
 }
 
 export function atualizarDevolucao(ocId: number, e: EdicaoDevolucao, autor: string): any {
@@ -301,9 +347,27 @@ export function atualizarDevolucao(ocId: number, e: EdicaoDevolucao, autor: stri
     notas.push(conferencia ? `Conferência: ${CONFERENCIAS[conferencia as Conferencia]}.` : "Conferência removida.");
   }
   if (mudou("conferenciaObs")) { sets.push("conferencia_obs = ?"); args.push(e.conferenciaObs?.trim() || null); }
-  if (mudou("motivoReal")) { sets.push("motivo_real = ?"); args.push(e.motivoReal?.trim() || null); notas.push(e.motivoReal?.trim() ? `Motivo real da devolução: ${e.motivoReal.trim()}.` : "Motivo real removido."); }
+  if (mudou("motivoReal") && (e.motivoReal?.trim() || null) !== (d.motivo_real ?? null)) { sets.push("motivo_real = ?"); args.push(e.motivoReal?.trim() || null); notas.push(e.motivoReal?.trim() ? `Motivo real da devolução: ${e.motivoReal.trim()}.` : "Motivo real removido."); }
   if (mudou("frete")) { sets.push("frete_centavos = ?", "frete_origem = ?"); args.push(cent(e.frete ?? null), e.frete == null ? null : "manual"); }
-  if (mudou("perda")) { sets.push("perda_centavos = ?"); args.push(cent(e.perda ?? null)); }
+  // O valor digitado vale mais que o calculado pelas unidades; salvar o mesmo valor de antes não muda a origem
+  if (mudou("perda") && cent(e.perda ?? null) !== d.perda_centavos) {
+    sets.push("perda_centavos = ?", "perda_origem = ?"); args.push(cent(e.perda ?? null), e.perda == null ? null : "manual");
+  }
+  if (mudou("unidades")) {
+    const unidades = unidadesDoPedido(ocId);
+    const validas = new Set(unidades.map((u) => u.chave));
+    const est: Record<string, EstadoUnidade> = {};
+    for (const [k, v] of Object.entries(e.unidades ?? {})) if (validas.has(k) && v && v in ESTADOS_UNIDADE) est[k] = v;
+    sets.push("itens_json = ?"); args.push(Object.keys(est).length ? JSON.stringify(est) : null);
+    const antes = estadosDe(d.itens_json);
+    const mudaram = unidades.filter((u) => (antes[u.chave] ?? null) !== (est[u.chave] ?? null));
+    if (mudaram.length)
+      notas.push("Conferência por unidade: " + mudaram.map((u) => `${u.sku || u.titulo || "item"}: ${est[u.chave] ? ESTADOS_UNIDADE[est[u.chave]].toLowerCase() : "sem marcação"}`).join("; ") + ".");
+    if (d.perda_origem !== "manual" && !mudou("perda")) {
+      const perda = Object.keys(est).length ? perdaPelasUnidades(unidades, est) : null;
+      if (perda !== d.perda_centavos) { sets.push("perda_centavos = ?", "perda_origem = ?"); args.push(perda, perda == null ? null : "unidades"); }
+    }
+  }
   if (mudou("outros")) { sets.push("outros_centavos = ?"); args.push(cent(e.outros ?? null)); }
   if (mudou("reembolso")) { sets.push("reembolso_centavos = ?", "reembolso_origem = ?"); args.push(cent(e.reembolso ?? null), e.reembolso == null ? null : "manual"); }
   if (mudou("recuperado")) { sets.push("recuperado_centavos = ?"); args.push(cent(e.recuperado ?? null)); }

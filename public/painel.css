@@ -224,3 +224,12 @@ body:not(.modo-equipe) .so-equipe { display: none !important; }
 details.faixa.conta { display: block; }
 details.faixa.conta > summary { cursor: pointer; list-style: revert; }
 details.faixa.conta[open] > summary { margin-bottom: 10px; }
+/* v1.20.0: itens do pedido no Tiny e conferência por unidade */
+.itens-tiny { padding: 8px 12px; border: 1px dashed var(--borda); border-radius: 12px; background: #fff; font-size: .875rem; }
+.itens-tiny p { margin: 0 0 4px; }
+.itens-tiny ul { margin: 0; padding-left: 18px; }
+.itens-tiny small { color: var(--suave); }
+fieldset.unidades { border: 1px solid var(--borda); border-radius: 12px; padding: 8px 12px 10px; margin: 8px 0 4px; }
+fieldset.unidades legend { font-weight: 600; font-size: .9rem; padding: 0 4px; }
+fieldset.unidades .unidade { margin-top: 8px; }
+fieldset.unidades .unidade small { color: var(--suave); font-weight: 400; }

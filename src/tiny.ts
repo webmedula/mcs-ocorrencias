@@ -182,8 +182,33 @@ async function custoUnitario(id: string, nivel = 0): Promise<number | null> {
   return pai && String(pai) !== "0" && nivel < 2 ? custoUnitario(String(pai), nivel + 1) : null;
 }
 
+/** Componente de um kit, já multiplicado pela quantidade do item no pedido (v1.20.0). */
+export interface ComponenteKit { sku: string | null; titulo: string | null; qtd: number; unitario: number | null }
 /** `origem: "ficha"` quando o custo veio da ficha de lucro do ml-analytics (sem o campo, veio do Tiny). */
-export interface CustoItem { sku: string | null; titulo: string | null; qtd: number; unitario: number | null; total: number | null; origem?: "ficha" }
+export interface CustoItem {
+  sku: string | null; titulo: string | null; qtd: number; unitario: number | null; total: number | null; origem?: "ficha";
+  componentes?: ComponenteKit[];
+}
+
+/** Componentes do kit no cadastro do Tiny (v1.20.0), para conferir a devolução unidade por unidade. Kit sem componentes devolve []. */
+async function componentesDoKit(id: string, qtdItem: number): Promise<ComponenteKit[]> {
+  const p = await produtoComCache(id);
+  if (!p || String(p.classe_produto ?? "").toUpperCase() !== "K") return [];
+  const kit: any[] = Array.isArray(p.kit) ? p.kit.map((k: any) => k?.item ?? k) : [];
+  const out: ComponenteKit[] = [];
+  for (const k of kit.slice(0, 10)) {
+    const idc = k?.id_produto != null && String(k.id_produto) !== "" ? String(k.id_produto) : null;
+    const comp = idc ? await produtoComCache(idc).catch(() => null) : null;
+    const cu = idc ? await custoUnitario(idc, 1).catch(() => null) : null;
+    out.push({
+      sku: comp?.codigo ? String(comp.codigo) : k?.codigo ? String(k.codigo) : null,
+      titulo: comp?.nome ? String(comp.nome) : k?.descricao ? String(k.descricao) : null,
+      qtd: (num(k?.quantidade) ?? 1) * qtdItem,
+      unitario: cu == null ? null : Math.round(cu * 100) / 100,
+    });
+  }
+  return out;
+}
 export interface CustoPedido { itens: CustoItem[]; total: number | null; faltando: string[] }
 
 /** Custo dos itens do pedido no Tiny, em reais. `total` fica null se algum item não tem custo no cadastro. Lança se o Tiny falhar. */
@@ -207,6 +232,10 @@ export async function custosDoPedido(idPedido: string): Promise<CustoPedido> {
       total: unitario == null ? null : Math.round(unitario * qtd * 100) / 100,
       ...(ficha != null ? { origem: "ficha" as const } : {}),
     });
+    if (id) {
+      const comps = await componentesDoKit(id, qtd).catch(() => []);
+      if (comps.length) out[out.length - 1].componentes = comps;
+    }
   }
   const total = out.length && !faltando.length ? Math.round(out.reduce((t, i) => t + (i.total ?? 0), 0) * 100) / 100 : null;
   return { itens: out, total, faltando };
