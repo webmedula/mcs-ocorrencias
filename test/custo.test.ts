@@ -155,6 +155,13 @@ describe("devolução por unidade (v1.20.0)", async () => {
     expect(atualizarDevolucao(o.id, { unidades: { "LE#1": "defeito", "LD#1": "defeito" } }, "Ana").custos.perda).toBe(15);
   });
 
+  it("escolher todos os itens da devolução fica gravado e não mexe no custo (v1.20.2)", async () => {
+    const o = await comDevolucao();
+    const d = atualizarDevolucao(o.id, { unidades: { "LE#1": "devolvida", "LE#2": "devolvida", "LD#1": "devolvida" } }, "Ana");
+    expect(d.unidades.map((u: any) => u.estado)).toEqual(["devolvida", "devolvida", "devolvida"]);
+    expect(d.custos.perda).toBeNull();
+  });
+
   it("o perfil Atendimento vê as unidades sem o custo", async () => {
     const o = await comDevolucao();
     const d = devolucaoParaEquipe(devolucaoDa(o.id));

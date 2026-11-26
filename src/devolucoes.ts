@@ -364,7 +364,9 @@ export function atualizarDevolucao(ocId: number, e: EdicaoDevolucao, autor: stri
     if (mudaram.length)
       notas.push("Conferência por unidade: " + mudaram.map((u) => `${u.sku || u.titulo || "item"}: ${est[u.chave] ? ESTADOS_UNIDADE[est[u.chave]].toLowerCase() : "sem marcação"}`).join("; ") + ".");
     if (d.perda_origem !== "manual" && !mudou("perda")) {
-      const perda = Object.keys(est).length ? perdaPelasUnidades(unidades, est) : null;
+      // Só calcula depois de conferir alguma unidade (escolher os itens da devolução não é conferir)
+      const conferida = Object.values(est).some((v) => v === "ok" || UNIDADE_COM_PERDA.has(v));
+      const perda = conferida ? perdaPelasUnidades(unidades, est) : null;
       if (perda !== d.perda_centavos) { sets.push("perda_centavos = ?", "perda_origem = ?"); args.push(perda, perda == null ? null : "unidades"); }
     }
   }
