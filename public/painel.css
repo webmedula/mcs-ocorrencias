@@ -237,3 +237,13 @@ fieldset.unidades .unidade small { color: var(--suave); font-weight: 400; }
 .itens-tiny.escolha label.caixa { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-weight: 400; cursor: pointer; }
 .itens-tiny.escolha label.caixa input { width: auto; min-height: 0; margin-top: 3px; }
 .itens-tiny.escolha button { margin-top: 6px; }
+/* v1.21.0: abas do caso com devolução (Conferência | Detalhes do caso) */
+.abas-caso { display: flex; gap: 6px; margin: 14px 0 4px; border-bottom: 1px solid var(--borda); }
+.abas-caso button.aba-caso { width: auto; min-height: 0; padding: 8px 14px; border: 1px solid transparent; border-bottom: 0; border-radius: 10px 10px 0 0; background: transparent; color: var(--suave); font-weight: 600; margin: 0 0 -1px; }
+.abas-caso button.aba-caso[aria-selected="true"] { background: #fff; color: var(--texto); border-color: var(--borda); border-bottom: 1px solid #fff; }
+.painel-aba { padding-top: 6px; }
+.painel-aba .conf-produto, .painel-aba .custos-venda { background: #fffaf0; border: 1px solid var(--borda); border-radius: 12px; padding: 4px 14px 14px; }
+.conf-produto.bipado { box-shadow: 0 0 0 3px var(--laranja); }
+.resumo-custo { display: grid; gap: 4px; margin-top: 12px; padding: 10px 12px; background: #fff; border: 1px solid var(--borda); border-radius: 10px; font-size: .9rem; }
+.resumo-custo div { display: flex; justify-content: space-between; gap: 10px; }
+.resumo-custo .neg { color: #8a2412; } .resumo-custo .pos { color: #15613c; }
