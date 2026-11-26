@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.21.0 — 2026-11-26
+
+- **Caso com devolução em duas abas.** A aba **Conferência** tem só o que o funcionário usa ao abrir o pacote, nesta ordem: produto do pedido com a escolha dos itens que voltaram (itens do Tiny), pedido no Tiny, conferência por unidade, resumo/motivo/observações e **Custos desta venda** (etiqueta da devolução, custo do produto perdido, outros custos, recuperado com o ML, com o custo da devolução e o resultado da venda logo abaixo). O perfil Atendimento não vê os custos. A aba **Detalhes do caso** tem o resto: status, fila e desfecho, reclamação e conversa do ML, situação da devolução e contestação, Conta da venda, descrição, notas, histórico e LGPD. Casos sem devolução seguem como antes.
+
 ## v1.20.2 — 2026-11-26
 
 - **Correção: "Salvar itens da devolução" não gravava quando todos os itens estavam marcados.** O item escolhido ainda sem conferência agora fica gravado como "faz parte da devolução, a conferir", e as caixas continuam marcadas depois de salvar, com o aviso "Itens da devolução salvos".

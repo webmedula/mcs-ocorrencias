@@ -291,22 +291,14 @@
         !o.anonimizada && estado.eu.papel === "gerente" ? botaoLgpd(o, "anonimizar", "Anonimizar", "Remove nome, e-mail, telefone, relato e fotos, mas mantém a ocorrência para as estatísticas.") : null,
         estado.eu.papel === "gerente" ? botaoLgpd(o, "excluir", "Excluir tudo", "Apaga a ocorrência inteira, com histórico e fotos. Não dá para desfazer.") : null));
 
-    const partes = [
+    const cabecalho = [
       h("div", { class: "cab" }, h("h2", {}, o.protocolo), h("span", { class: "etiqueta " + o.status }, STATUS_INT[o.status] || o.status)),
       h("p", { class: "meta" }, `${m.canais[o.canal] || o.canal} · pedido ${o.pedido} · ${m.tipos[o.tipo] || o.tipo}`),
       ehMl
         ? h("p", { class: "meta" }, `Comprador ${o.nome} (o Mercado Livre não informa o e-mail) · aberta em ${fmt(o.criado_em)}`)
         : h("p", { class: "meta" }, `${o.nome} · `, h("a", { href: "mailto:" + o.email }, o.email), o.telefone ? ` · ${o.telefone}` : "", ` · aberta em ${fmt(o.criado_em)}`),
-      // v1.19.0: produto e Tiny no topo, ações juntas, depois ML, devolução e a conta (recolhida)
-      blocoProdutos(o),
-      tiny,
-      h("div", { class: "acoes-caso" },
-        h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
-        blocoResponsavel(o),
-        blocoDesfecho(o)),
-      ...(ehMl ? [blocoMl(o), o.anonimizada ? null : formMl(o)] : []),
-      blocoDevolucao(o),
-      blocoConta(o),
+    ];
+    const resto = () => [
       h("h3", {}, ehMl ? "Descrição" : "Relato do cliente"), h("p", { class: "relato" }, o.descricao),
       ...(ehMl ? [] : [h("h3", {}, `Fotos (${o.anexos.length})`), fotos]),
       blocoPesquisa(o),
@@ -314,7 +306,44 @@
       formNota, o.anonimizada || ehMl ? null : formResp,
       h("h3", {}, "Histórico"), hist, lgpd,
     ];
-    box.append(...partes.flat(Infinity).filter((x) => x != null && x !== false));
+    const acoesCaso = () => h("div", { class: "acoes-caso" },
+      h("div", { class: "acao" }, h("label", { for: "d-status" }, "Mudar status"), seletor, msgStatus),
+      blocoResponsavel(o),
+      blocoDesfecho(o));
+    const plano = (xs) => xs.flat(Infinity).filter((x) => x != null && x !== false);
+
+    // v1.21.0: com devolução, a tela se divide em duas abas. "Conferência" tem só o que o funcionário usa ao abrir o pacote.
+    const dev = partesDevolucao(o);
+    if (dev) {
+      const d = o.devolucao;
+      const situacao = h("p", { class: "meta" }, `Devolução: ${d.statusRotulo}${d.envio.rastreio ? ` · rastreio ${d.envio.rastreio}` : ""}`);
+      const painelConf = h("div", { class: "painel-aba", role: "tabpanel", id: "aba-conf" },
+        ...plano([blocoProdutos(o), tiny, dev.conf, dev.custos]));
+      const painelDet = h("div", { class: "painel-aba", role: "tabpanel", id: "aba-det" },
+        ...plano([acoesCaso(), ...(ehMl ? [blocoMl(o), o.anonimizada ? null : formMl(o)] : []), dev.info, blocoConta(o), resto()]));
+      const botoes = [["conf", "Conferência"], ["det", "Detalhes do caso"]].map(([k, rot]) =>
+        h("button", { type: "button", role: "tab", class: "aba-caso", "aria-controls": `aba-${k}`, "data-aba": k }, rot));
+      const mostrarAba = (k) => {
+        estado.abaCaso = k;
+        for (const b of botoes) b.setAttribute("aria-selected", String(b.dataset.aba === k));
+        painelConf.hidden = k !== "conf"; painelDet.hidden = k !== "det";
+      };
+      for (const b of botoes) b.addEventListener("click", () => mostrarAba(b.dataset.aba));
+      mostrarAba(estado.abaCaso === "det" && !dev.conf.classList.contains("bipado") ? "det" : "conf");
+      box.append(...plano([cabecalho, situacao, h("div", { class: "abas-caso", role: "tablist" }, botoes), painelConf, painelDet]));
+      return;
+    }
+
+    const partes = [
+      cabecalho,
+      blocoProdutos(o),
+      tiny,
+      acoesCaso(),
+      ...(ehMl ? [blocoMl(o), o.anonimizada ? null : formMl(o)] : []),
+      blocoConta(o),
+      resto(),
+    ];
+    box.append(...plano(partes));
   }
 
   // Responsável: seletor com a equipe ativa e atalho "Assumir"
@@ -417,6 +446,8 @@
   const moeda = (v) => (typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null);
   // v1.20.0: o pedido como está no Tiny (uma venda do ML pode ser um kit com várias unidades)
   // v1.20.1: com devolução, cada unidade ganha a caixa "voltou na devolução"; a conferência segue só com as marcadas
+  const rotuloUnidade = (u) => [u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
+    typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null];
   const temUnidades = (d) => !!d && Array.isArray(d.unidades) && (d.unidades.length > 1 || d.unidades.some((u) => u.kit));
   function escolhaDevolucao(o) {
     const d = o.devolucao;
@@ -428,8 +459,7 @@
     const kits = [...new Set(unidades.map((u) => u.kit).filter(Boolean))];
     const f = h("form", { class: "itens-tiny escolha", novalidate: true },
       h("p", { class: "aviso" }, h("strong", {}, "No Tiny"), kits.length ? ` (kit ${kits.join(", ")} aberto nas unidades)` : "", ". Marque o que voltou na devolução:"),
-      unidades.map((u, i) => h("label", { class: "caixa", for: `it-un-${i}` }, caixas[i],
-        h("span", {}, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item", typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null))),
+      unidades.map((u, i) => h("label", { class: "caixa", for: `it-un-${i}` }, caixas[i], h("span", {}, rotuloUnidade(u)))),
       msg, h("button", { type: "submit", class: "sec mini" }, "Salvar itens da devolução"));
     f.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -559,7 +589,8 @@
     $("#dv-prox").disabled = d.pagina >= paginas;
   }
 
-  function blocoDevolucao(o) {
+  // v1.21.0: a devolução em partes, para a aba Conferência (conferência e custos) e a aba Detalhes (situação e contestação)
+  function partesDevolucao(o) {
     const d = o.devolucao;
     if (!d) return null;
     const recarregar = async () => { await selecionar(o.protocolo, false); await carregarLista(); };
@@ -599,13 +630,11 @@
     const blocoUnid = temUnidades(d)
       ? h("fieldset", { class: "unidades" }, h("legend", {}, escolhida ? "Itens da devolução" : "Como voltou cada unidade"),
           escolhida ? null : h("p", { class: "aviso" }, "Dica: marque no quadro Produto do pedido quais itens voltaram, e só eles aparecem aqui."),
-          unidades.map((u, i) => h("div", { class: "unidade" },
-            h("label", { for: `dv-un-${i}` }, u.sku ? h("b", {}, u.sku + " ") : null, u.titulo || "Item",
-              typeof u.custo === "number" ? h("small", {}, ` · custo ${reaisTxt(u.custo)}`) : null), selUnid[i])),
+          unidades.map((u, i) => h("div", { class: "unidade" }, h("label", { for: `dv-un-${i}` }, rotuloUnidade(u)), selUnid[i])),
           fora.length ? h("p", { class: "aviso" }, `Fora da devolução: ${fora.map((u) => u.sku || u.titulo || "item").join(", ")}.`) : null,
           d.custos ? h("p", { class: "aviso" }, "O custo das unidades com defeito ou que não voltaram entra sozinho em Produto perdido.") : null)
       : null;
-    const formConf = h("form", { class: "acao", novalidate: true },
+    const formConf = h("form", { class: "acao conf-produto", novalidate: true },
       h("h3", {}, "Conferência do produto"),
       d.conferidaPor ? h("p", { class: "aviso" }, `Conferido por ${d.conferidaPor} em ${fmt(d.conferidaEm)}.`) : null,
       blocoUnid,
@@ -624,36 +653,39 @@
     // Custos (v1.17.0: o servidor manda custos = null para o perfil Atendimento, e o quadro some)
     const c = d.custos || {};
     const campo = (id, rot, v, dica) => [h("label", { for: id }, rot, dica ? h("span", { class: "dica" }, " " + dica) : null), h("input", { type: "text", id, inputmode: "decimal", placeholder: "0,00", autocomplete: "off", value: emReais(v) })];
-    const [lFrete, iFrete] = campo("dv-frete", "Frete da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
+    // v1.21.0: "Custos desta venda", na aba Conferência (o reembolso, informativo, fica só na Conta da venda)
+    const [lFrete, iFrete] = campo("dv-frete", "Etiqueta da devolução (R$)", c.frete, c.freteOrigem === "ml" ? "(vindo do Mercado Livre)" : c.freteOrigem === "manual" ? "(digitado)" : "");
     const custoTiny = o.conta && o.conta.custoTiny != null ? o.conta.custoTiny : null;
-    const [lPerda, iPerda] = campo("dv-perda", "Produto perdido ou danificado (R$)", c.perda,
-      c.perdaOrigem === "unidades" ? "(calculado pelas unidades conferidas; pode mudar)" : custoTiny != null ? `(custo do pedido no Tiny: ${reaisTxt(custoTiny)})` : "");
-    const [lOutros, iOutros] = campo("dv-outros", "Outros custos (R$)", c.outros);
-    const [lReemb, iReemb] = campo("dv-reemb", "Valor reembolsado ao comprador (R$)", c.reembolso, c.reembolsoOrigem === "estimado" ? "(estimado pelo valor dos produtos; informativo, não entra no custo)" : "(informativo, não entra no custo)");
+    const [lPerda, iPerda] = campo("dv-perda", "Custo do produto perdido ou danificado (R$)", c.perda,
+      c.perdaOrigem === "unidades" ? "(pelas unidades conferidas; pode mudar)" : custoTiny != null ? `(custo do pedido no Tiny: ${reaisTxt(custoTiny)})` : "");
+    const [lOutros, iOutros] = campo("dv-outros", "Outros custos (R$)", c.outros, "(embalagem, frete extra etc.)");
     const [lRec, iRec] = campo("dv-rec", "Recuperado com o Mercado Livre (R$)", c.recuperado, "(desconta do custo)");
     const custoMsg = h("p", { class: "msg-ok oculto", role: "status" });
-    const formCusto = h("form", { class: "acao", novalidate: true },
-      h("h3", {}, "Custos da devolução"),
-      h("p", { class: "aviso" }, "Esses valores entram na Conta da venda: frete da devolução como etiqueta, produto perdido como custo do produto, outros custos e o recuperado com o ML."),
-      lFrete, iFrete, lPerda, iPerda, lOutros, iOutros, lReemb, iReemb, lRec, iRec, custoMsg,
+    const resultado = o.conta && typeof o.conta.resultado === "number" ? o.conta.resultado : null;
+    const resumoCusto = h("div", { class: "resumo-custo" },
+      h("div", {}, h("span", {}, "Custo desta devolução"), h("b", {}, c.total != null ? reaisTxt(c.total) : "—")),
+      resultado != null ? h("div", {}, h("span", {}, "Resultado da venda para a MCS"), h("b", { class: resultado < 0 ? "neg" : "pos" }, sinal(resultado))) : null);
+    const formCusto = h("form", { class: "acao custos-venda", novalidate: true },
+      h("h3", {}, "Custos desta venda"),
+      h("p", { class: "aviso" }, "Entram na Conta da venda (aba Detalhes do caso)."),
+      lFrete, iFrete, lPerda, iPerda, lOutros, iOutros, lRec, iRec, resumoCusto, custoMsg,
       h("button", { type: "submit", class: "sec mini" }, "Salvar custos"));
     formCusto.addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      const v = { frete: lerReais(iFrete.value), perda: lerReais(iPerda.value), outros: lerReais(iOutros.value), reembolso: lerReais(iReemb.value), recuperado: lerReais(iRec.value) };
+      const v = { frete: lerReais(iFrete.value), perda: lerReais(iPerda.value), outros: lerReais(iOutros.value), recuperado: lerReais(iRec.value) };
       if (Object.values(v).some((x) => Number.isNaN(x))) { custoMsg.textContent = "Valor inválido. Use, por exemplo, 49,90."; mostrar(custoMsg, true); return; }
       const r = await api("PATCH", `/ocorrencias/${encodeURIComponent(o.protocolo)}/devolucao`, v);
       if (r.ok) await recarregar(); else { custoMsg.textContent = r.json.erro || "Não foi possível salvar."; mostrar(custoMsg, true); }
     });
 
-    // v1.18.0: caso aberto pelo leitor de código de barras: rola até a devolução
+    // v1.18.0: caso aberto pelo leitor de código de barras: rola até a conferência
     const bipado = estado.bipado === o.protocolo;
-    if (bipado) estado.bipado = null;
+    if (bipado) { estado.bipado = null; formConf.classList.add("bipado"); setTimeout(() => formConf.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
 
-    const bloco = h("div", { class: "faixa ml-info devolucao" + (bipado ? " bipado" : "") },
+    const info = h("div", { class: "faixa ml-info devolucao" },
       h("h3", {}, "Devolução"), h("dl", {}, linhas.map(([k, v]) => [h("dt", {}, k), h("dd", {}, String(v))])),
-      faixaLiberar, links, msgTopo, formConf, d.custos ? formCusto : null, blocoContestacao(o, recarregar));
-    if (bipado) setTimeout(() => bloco.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-    return bloco;
+      faixaLiberar, links, msgTopo, blocoContestacao(o, recarregar));
+    return { info, conf: formConf, custos: d.custos ? formCusto : null };
   }
 
   function blocoContestacao(o, recarregar) {
