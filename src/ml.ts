@@ -197,24 +197,80 @@ async function sincronizarAgora(): Promise<ResultadoSync> {
   return res;
 }
 
-async function dadosDoPedido(claim: any): Promise<{ pedido: string; nome: string; titulo: string | null; produtos: ProdutoMl[]; bruto: any | null }> {
-  const rid = claim.resource_id != null ? String(claim.resource_id) : String(claim.id);
+/** v1.21.1: reclamações de "produto não recebido" apontam para o envio (shipment), não para o pedido. Acha o pedido pelo envio. */
+export async function pedidoDoEnvio(envioId: string): Promise<string | null> {
+  try {
+    const s = await ml(`/shipments/${encodeURIComponent(envioId)}`);
+    const oid = s?.order_id ?? s?.external_reference ?? null;
+    if (oid != null && /^\d+$/.test(String(oid))) return String(oid);
+  } catch (e: any) {
+    console.error(`[ml] não consegui ler o envio ${envioId}: ${e?.message}`);
+  }
+  try {
+    const itens = await ml(`/shipments/${encodeURIComponent(envioId)}/items`);
+    const lista: any[] = Array.isArray(itens) ? itens : Array.isArray(itens?.items) ? itens.items : [];
+    const oid = lista.map((i) => i?.order_id).find((x) => x != null);
+    if (oid != null) return String(oid);
+  } catch { /* sem itens */ }
+  return null;
+}
+
+/** Busca no Tiny pelo pedido e, se não achar, pelo carrinho (pack) do ML. */
+async function buscarNoTiny(pedido: string, pack: string | null) {
+  const t = await buscarPedido(pedido);
+  if (t.status === "nao_encontrado" && pack && pack !== pedido) {
+    const t2 = await buscarPedido(pack);
+    if (t2.status === "encontrado") return t2;
+  }
+  return t;
+}
+
+async function dadosDoPedido(claim: any): Promise<{ pedido: string; pack: string | null; nome: string; titulo: string | null; produtos: ProdutoMl[]; bruto: any | null }> {
+  let rid = claim.resource_id != null ? String(claim.resource_id) : String(claim.id);
   let nome = "Comprador do Mercado Livre";
   let titulo: string | null = null;
   let produtos: ProdutoMl[] = [];
   let bruto: any | null = null;
-  if (claim.resource === "order" || claim.resource === undefined) {
+  let pack: string | null = null;
+  let ehPedido = claim.resource === "order" || claim.resource === undefined;
+  if (claim.resource === "shipment" && claim.resource_id != null) {
+    const oid = await pedidoDoEnvio(String(claim.resource_id));
+    if (oid) { rid = oid; ehPedido = true; }
+  }
+  if (ehPedido) {
     try {
       const o = await ml(`/orders/${encodeURIComponent(rid)}`);
       bruto = o;
       nome = o?.buyer?.nickname || (o?.buyer?.id ? `Comprador ${o.buyer.id}` : nome);
+      pack = o?.pack_id != null ? String(o.pack_id) : null;
       titulo = o?.order_items?.[0]?.item?.title ?? null;
       produtos = await produtosDoPedido(o);
     } catch (e: any) {
       console.error(`[ml] não consegui ler o pedido ${rid}: ${e?.message}`);
     }
   }
-  return { pedido: rid, nome, titulo, produtos, bruto };
+  return { pedido: rid, pack, nome, titulo, produtos, bruto };
+}
+
+/** v1.21.1: casos importados com o número do envio no lugar do pedido. Troca pelo pedido e refaz Tiny, produto, conta e custo. */
+async function corrigirPedidoDoEnvio(existente: any, claim: any, vendedor: string): Promise<void> {
+  const envio = String(claim.resource_id);
+  const { pedido, pack, nome, produtos, bruto } = await dadosDoPedido(claim);
+  if (pedido === envio) return; // o ML ainda não deu o pedido: tenta na próxima sincronização
+  const tiny = await buscarNoTiny(pedido, pack);
+  db.transaction(() => {
+    db.prepare(
+      `UPDATE ocorrencias SET pedido = ?, nome = CASE WHEN nome = 'Comprador do Mercado Livre' THEN ? ELSE nome END,
+         tiny_status = ?, tiny_json = ?, produto_json = COALESCE(produto_json, ?), atualizado_em = datetime('now') WHERE id = ?`,
+    ).run(pedido, nome, tiny.status, tiny.status === "encontrado" ? JSON.stringify(tiny.pedido) : null,
+      produtos.length ? JSON.stringify(produtos) : null, existente.id);
+    db.prepare("INSERT INTO eventos (ocorrencia_id, texto, publico, autor) VALUES (?,?,0,?)")
+      .run(existente.id, `Pedido corrigido: ${envio} era o número do envio no Mercado Livre; o pedido é ${pedido}.`, "Sistema");
+  })();
+  existente.pedido = pedido;
+  if (bruto) await atualizarContaVenda(existente.id, bruto, vendedor);
+  db.prepare("UPDATE conta_venda SET custo_tiny_em = NULL WHERE ocorrencia_id = ?").run(existente.id);
+  await atualizarCustoTiny(existente.id);
 }
 
 async function motivoDe(reasonId: string | null): Promise<string | null> {
@@ -251,8 +307,8 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
   if (!existente) {
     if (claim.status === "closed") return { nova: false, atualizada: false, mensagens: 0 }; // não importa histórico já encerrado
     const motivo = await motivoDe(claim.reason_id ?? null);
-    const { pedido, nome, titulo, produtos, bruto } = await dadosDoPedido(claim);
-    const tiny = await buscarPedido(pedido);
+    const { pedido, pack, nome, titulo, produtos, bruto } = await dadosDoPedido(claim);
+    const tiny = await buscarNoTiny(pedido, pack);
     const msgs = await baixarMensagens(id);
     const primeira = msgs.find((m) => m.sender_role === "complainant")?.message;
     const descricao = [
@@ -303,7 +359,12 @@ async function processarClaim(claim: any, vendedor: string): Promise<{ nova: boo
     return { nova: true, atualizada: false, mensagens: n };
   }
 
-  // Já conhecida. Reclamações importadas antes da v1.5.0 ainda não têm a foto do produto: busca agora
+  // Já conhecida. v1.21.1: importada com o número do envio no lugar do pedido
+  if (claim.resource === "shipment" && claim.resource_id != null && existente.pedido === String(claim.resource_id) && !existente.anonimizada) {
+    try { await corrigirPedidoDoEnvio(existente, claim, vendedor); }
+    catch (e: any) { console.error(`[ml] correção do pedido da reclamação ${id}: ${e?.message}`); }
+  }
+  // Reclamações importadas antes da v1.5.0 ainda não têm a foto do produto: busca agora
   if (!existente.produto_json && !existente.anonimizada && existente.status !== "resolvida") {
     const { produtos } = await dadosDoPedido(claim);
     if (produtos.length) db.prepare("UPDATE ocorrencias SET produto_json = ? WHERE id = ?").run(JSON.stringify(produtos), existente.id);

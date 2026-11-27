@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.21.1 — 2026-11-27
+
+- **Correção: reclamações de "produto não recebido" vinham com o número do envio no lugar do pedido.** Nesses casos o Mercado Livre aponta a reclamação para o envio (shipment). Agora a Central lê o envio, pega o número do pedido e com ele acha o comprador, o produto, a conta da venda e o pedido no Tiny (tenta também pelo carrinho/pack do ML).
+- Os casos já importados assim (ex.: pedido 48461260905) são corrigidos sozinhos na próxima sincronização com o ML, com uma nota no histórico.
+
 ## v1.21.0 — 2026-11-26
 
 - **Caso com devolução em duas abas.** A aba **Conferência** tem só o que o funcionário usa ao abrir o pacote, nesta ordem: produto do pedido com a escolha dos itens que voltaram (itens do Tiny), pedido no Tiny, conferência por unidade, resumo/motivo/observações e **Custos desta venda** (etiqueta da devolução, custo do produto perdido, outros custos, recuperado com o ML, com o custo da devolução e o resultado da venda logo abaixo). O perfil Atendimento não vê os custos. A aba **Detalhes do caso** tem o resto: status, fila e desfecho, reclamação e conversa do ML, situação da devolução e contestação, Conta da venda, descrição, notas, histórico e LGPD. Casos sem devolução seguem como antes.
