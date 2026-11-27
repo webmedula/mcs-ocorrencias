@@ -188,6 +188,8 @@ async function sincronizarAgora(): Promise<ResultadoSync> {
         if (e instanceof MlErro && e.status === 401) throw e;
       }
     }
+    // v1.21.2: casos antigos (inclusive resolvidos) com o número do envio no lugar do pedido
+    try { await repararPedidosDeEnvio(c.user_id); } catch (e: any) { console.error(`[ml] reparo de pedidos: ${e?.message}`); }
     db.prepare("UPDATE ml_conexao SET ultima_sync = datetime('now'), ultimo_erro = NULL WHERE id = 1").run();
   } catch (e: any) {
     const msg = e instanceof MlErro ? e.message : `Falha ao sincronizar: ${e?.message}`;
@@ -253,6 +255,26 @@ async function dadosDoPedido(claim: any): Promise<{ pedido: string; pack: string
 }
 
 /** v1.21.1: casos importados com o número do envio no lugar do pedido. Troca pelo pedido e refaz Tiny, produto, conta e custo. */
+/** v1.21.2: repara também os casos já resolvidos (que a sincronização não revisita), poucos por rodada.
+ *  Pega os que guardaram resource = shipment e, nos importados antes de guardar isso, o número com cara de envio (11 dígitos). */
+const reparoFalhou = new Set<number>();
+export async function repararPedidosDeEnvio(vendedor: string, max = 10): Promise<number> {
+  const casos = (db.prepare(
+    `SELECT * FROM ocorrencias WHERE origem = 'ml' AND anonimizada = 0 AND (
+       (json_extract(ml_json, '$.resource') = 'shipment' AND pedido = CAST(json_extract(ml_json, '$.resource_id') AS TEXT))
+       OR (pedido GLOB '[0-9]*' AND length(pedido) BETWEEN 10 AND 12 AND pedido NOT LIKE '2000%'))
+     ORDER BY id DESC LIMIT 50`,
+  ).all() as any[]).filter((o) => !reparoFalhou.has(o.id)).slice(0, max);
+  let n = 0;
+  for (const o of casos) {
+    const antes = o.pedido;
+    try { await corrigirPedidoDoEnvio(o, { resource: "shipment", resource_id: o.pedido }, vendedor); }
+    catch (e: any) { console.error(`[ml] reparo do pedido do caso ${o.protocolo}: ${e?.message}`); }
+    if (o.pedido !== antes) n++; else reparoFalhou.add(o.id);
+  }
+  return n;
+}
+
 async function corrigirPedidoDoEnvio(existente: any, claim: any, vendedor: string): Promise<void> {
   const envio = String(claim.resource_id);
   const { pedido, pack, nome, produtos, bruto } = await dadosDoPedido(claim);

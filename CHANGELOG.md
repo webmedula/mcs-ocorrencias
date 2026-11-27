@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.21.2 — 2026-11-27
+
+- **Correção: casos já resolvidos continuavam com o número do envio no lugar do pedido** (ex.: MCS-20261125-JVB4FW, pedido 48532558877). A sincronização com o ML só revisita os casos em aberto, então a correção da v1.21.1 não chegava neles. Agora, a cada sincronização, a Central repara até 10 casos antigos assim, de qualquer status: os que guardaram que a reclamação era do envio e os importados antes disso com número de 11 dígitos (cara de envio). O status do caso não muda; fica uma nota no histórico.
+
 ## v1.21.1 — 2026-11-27
 
 - **Correção: reclamações de "produto não recebido" vinham com o número do envio no lugar do pedido.** Nesses casos o Mercado Livre aponta a reclamação para o envio (shipment). Agora a Central lê o envio, pega o número do pedido e com ele acha o comprador, o produto, a conta da venda e o pedido no Tiny (tenta também pelo carrinho/pack do ML).
