@@ -4,7 +4,7 @@ import path from "node:path";
 const env = process.env;
 
 export const config = {
-  version: "1.21.1",
+  version: "1.21.2",
   port: Number(env.PORT ?? 3000),
   // Identidade (exibida no front via /api/config)
   brandName: env.BRAND_NAME ?? "Sua Empresa",
@@ -142,7 +142,7 @@ export const CONFERENCIAS = {
   outro: "Outro problema",
 } as const;
 
-// v1.21.1: como voltou cada unidade do pedido (itens do Tiny, kits abertos nos componentes)
+// v1.21.2: como voltou cada unidade do pedido (itens do Tiny, kits abertos nos componentes)
 export const ESTADOS_UNIDADE = {
   ok: "Voltou em bom estado",
   defeito: "Voltou com defeito ou danificada",

@@ -21,6 +21,8 @@ function simular(claims: unknown[]) {
     if (caminho.startsWith("/post-purchase/v1/claims/search")) return { data: claims };
     if (caminho === "/shipments/48461260905") return { id: 48461260905, order_id: 2000019000000001 };
     if (caminho === "/shipments/48461260999") return { id: 48461260999 };
+    if (caminho === "/shipments/48532558877") return { id: 48532558877, order_id: 2000019000000003 };
+    if (caminho.startsWith("/orders/2000019000000003")) return { id: 2000019000000003, buyer: { id: 9, nickname: "COMPRADOR3" }, order_items: [] };
     if (caminho === "/shipments/48461260999/items") return [{ item_id: "MLB1", order_id: 2000019000000002 }];
     if (caminho.startsWith("/orders/2000019000000001")) return { id: 2000019000000001, buyer: { id: 7, nickname: "COMPRADOR1" }, order_items: [{ item: { title: "Lanterna" } }] };
     if (caminho.startsWith("/orders/2000019000000002")) return { id: 2000019000000002, buyer: { id: 8, nickname: "COMPRADOR2" }, order_items: [] };
@@ -50,5 +52,16 @@ describe("reclamação pelo envio do Mercado Livre", () => {
     // Rodada seguinte: já corrigido, nada muda
     await sincronizar();
     expect((db.prepare("SELECT COUNT(*) n FROM eventos WHERE ocorrencia_id = ? AND texto LIKE 'Pedido corrigido%'").get(o.id) as any).n).toBe(1);
+  });
+
+  it("repara também caso já resolvido, que a sincronização não revisita (v1.21.2)", async () => {
+    db.prepare(
+      `INSERT INTO ocorrencias (protocolo, canal, pedido, tipo, descricao, nome, email, origem, ml_claim_id, tiny_status, status, ml_json)
+       VALUES ('MCS-ENVIO-2', 'mercado_livre', '48532558877', 'nao_recebido', 'x', 'Comprador do Mercado Livre', '', 'ml', '903', 'nao_encontrado', 'resolvida', ?)`,
+    ).run(JSON.stringify({ id: "903", status: "closed" }));
+    simular([]);
+    await sincronizar();
+    expect(db.prepare("SELECT pedido, nome, status FROM ocorrencias WHERE ml_claim_id = '903'").get())
+      .toEqual({ pedido: "2000019000000003", nome: "COMPRADOR3", status: "resolvida" });
   });
 });
